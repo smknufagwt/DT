@@ -101,7 +101,7 @@ button.ghost{
 }
 .cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px;}
 .cell .k{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
-.cell .v{font-size:16px; font-weight:700; margin-top:3px;}
+.cell .v{font-size:16px; font-weight:700; margin-top:3px; overflow-wrap:break-word; word-break:break-word;}
 .cell .v.sl{color:var(--red);}
 .cell .v.tp{color:var(--neon);}
 
@@ -212,12 +212,20 @@ footer a{color:var(--neon);}
         </select>
       </div>
       <div>
-        <label>Timeframe</label>
+        <label>Timeframe (Gaya Trading)</label>
         <select id="interval">
-          <option value="5min">M5</option>
-          <option value="15min" selected>M15</option>
-          <option value="1h">H1</option>
-          <option value="4h">H4</option>
+          <optgroup label="Scalping">
+            <option value="1min">M1 — Scalping</option>
+            <option value="5min">M5 — Scalping</option>
+          </optgroup>
+          <optgroup label="Day Trading">
+            <option value="15min" selected>M15 — Day Trading</option>
+            <option value="1h">H1 — Day Trading</option>
+          </optgroup>
+          <optgroup label="Swing Trading">
+            <option value="4h">H4 — Swing Trading</option>
+            <option value="1day">D1 — Swing Trading</option>
+          </optgroup>
         </select>
       </div>
     </div>
@@ -261,14 +269,14 @@ footer a{color:var(--neon);}
   </section>
 
   <section class="panel">
-    <h2>// Info Krusial Trader</h2>
+    <h2>// Sesi Pasar</h2>
     <div class="grid" id="sessionArea"></div>
-    <div class="data-grid" id="pivotArea" style="margin-top:14px;"></div>
   </section>
 
   <section class="panel">
     <h2>// Sinyal Aktif</h2>
     <div id="signalArea"><div class="empty">Belum ada sinyal. Masukkan API key lalu klik "Scan Sinyal".</div></div>
+    <div class="data-grid" id="pivotArea" style="margin-top:14px;"></div>
   </section>
 
   <section class="panel">
@@ -450,11 +458,16 @@ function trendLabel(adx){
 }
 
 /* ============ Pivot points (dari candle harian sebelumnya) ============ */
+const pivotCache = new Map(); // key: symbol_YYYY-MM-DD -> hemat request TD karena datanya harian
 async function fetchPrevDay(symbol){
+  const cacheKey = symbol + '_' + new Date().toISOString().slice(0,10);
+  if(pivotCache.has(cacheKey)) return pivotCache.get(cacheKey);
   const json=await tdRequest('time_series', { symbol, interval:'1day', outputsize:2 });
   if(json.status==='error' || !json.values) throw new Error('Gagal ambil data harian untuk pivot.');
   const rows=json.values.slice().reverse();
-  return rows[rows.length-2] || rows[rows.length-1];
+  const result = rows[rows.length-2] || rows[rows.length-1];
+  pivotCache.set(cacheKey, result);
+  return result;
 }
 function calcPivots(prevDay, symbol){
   const h=+prevDay.high, l=+prevDay.low, c=+prevDay.close;
@@ -779,7 +792,10 @@ function renderFundamentals(m){
 }
 
 /* ============ Main scan ============ */
+let isScanning=false;
 async function scan(){
+  if(isScanning) return; // cegah scan tumpang tindih (misal ganti pair pas auto-scan lagi jalan) -> hemat kuota API
+  isScanning=true;
   const symbol=document.getElementById('symbol').value;
   const interval=document.getElementById('interval').value;
   const balance=+document.getElementById('balance').value || 0;
@@ -801,7 +817,7 @@ async function scan(){
     drawChart(candles, symbol, sig);
 
     document.getElementById('pivotArea').innerHTML=`
-      <div class="cell"><div class="k">Trend (ADX14)</div><div class="v">${trendAdx.toFixed(1)} · ${trendLabel(trendAdx)}</div></div>`;
+      <div class="cell"><div class="k">Trend (ADX14)</div><div class="v" style="font-size:15px;">${trendAdx.toFixed(1)}</div><div class="meta" style="margin-top:2px;">${trendLabel(trendAdx)}</div></div>`;
     try{
       const prevDay=await fetchPrevDay(symbol);
       const piv=calcPivots(prevDay, symbol);
@@ -847,6 +863,7 @@ async function scan(){
   } else {
     fundPanel.style.display='none';
   }
+  isScanning=false;
 }
 
 window.addEventListener('resize', ()=>{ if(lastCandles && lastSignal) drawChart(lastCandles, lastSignal.symbol, lastSignal); });
