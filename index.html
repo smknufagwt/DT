@@ -108,7 +108,9 @@ button.ghost{
 .empty{color:var(--muted); font-size:12.5px; padding:10px 0;}
 .error{color:var(--red); font-size:12px; margin-top:10px;}
 
-table{width:100%; border-collapse:collapse; font-size:11.5px; margin-top:6px;}
+table{width:100%; min-width:520px; border-collapse:collapse; font-size:10px; margin-top:6px;}
+.table-scroll{width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+table th, table td{white-space:nowrap;}
 th,td{padding:7px 8px; text-align:left; border-bottom:1px solid var(--border);}
 th{color:var(--muted); font-weight:500; text-transform:uppercase; font-size:10px;}
 td.buy{color:var(--neon);} td.sell{color:var(--red);}
@@ -271,10 +273,12 @@ footer a{color:var(--neon);}
 
   <section class="panel">
     <h2>// Riwayat Sesi</h2>
+    <div class="table-scroll">
     <table id="historyTable">
       <thead><tr><th>Waktu</th><th>Pair</th><th>Arah</th><th>Entry</th><th>SL</th><th>TP1</th><th>Conf.</th></tr></thead>
       <tbody id="historyBody"></tbody>
     </table>
+    </div>
     <div class="empty" id="historyEmpty">Riwayat kosong.</div>
   </section>
 
@@ -285,7 +289,20 @@ footer a{color:var(--neon);}
 
   <section class="panel">
     <h2>// Kalender Ekonomi (Fundamental Makro)</h2>
-    <div id="calendarArea"><div class="empty">Memuat event ekonomi high-impact 7 hari ke depan...</div></div>
+    <div class="tradingview-widget-container">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
+      {
+      "colorTheme": "dark",
+      "isTransparent": true,
+      "width": "100%",
+      "height": "400",
+      "locale": "id",
+      "importanceFilter": "-1,0,1",
+      "currencyFilter": "USD,EUR,GBP,JPY,AUD,CAD,CHF,NZD,XAU"
+      }
+      </script>
+    </div>
   </section>
 
   <section class="panel" id="fundamentalPanel" style="display:none;">
@@ -743,26 +760,6 @@ function renderQuote(q, symbol){
     <div class="cell"><div class="k">Update</div><div class="v" style="font-size:11px;">${q.datetime||'-'}</div></div>`;
 }
 
-/* ============ Kalender ekonomi (fundamental makro) ============ */
-async function fetchEconomicCalendar(){
-  const from=new Date().toISOString().slice(0,10);
-  const to=new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
-  const json=await fhRequest('calendar/economic', { from, to });
-  const items=json && json.economicCalendar;
-  if(!Array.isArray(items)) throw new Error('Kalender ekonomi tidak tersedia (butuh akses Finnhub tertentu).');
-  return items.filter(e=>e.impact==='high' || e.impact==='medium').slice(0,12);
-}
-function renderCalendar(items){
-  const area=document.getElementById('calendarArea');
-  if(!items.length){ area.innerHTML='<div class="empty">Tidak ada event high/medium-impact dalam 7 hari ke depan.</div>'; return; }
-  area.innerHTML=items.map(e=>`
-    <div class="news-item">
-      <span class="news-tag ${e.impact==='high'?'fed':'gen'}">${(e.impact||'').toUpperCase()}</span>
-      ${e.country||''} — ${e.event||'-'}
-      <div class="news-time">Perkiraan: ${e.time||'-'} · Estimate: ${e.estimate??'-'} · Prev: ${e.prev??'-'}</div>
-    </div>`).join('');
-}
-
 /* ============ Fundamental saham (mikro, khusus simbol saham/index) ============ */
 async function fetchStockFundamentals(symbol){
   const json=await fhRequest('stock/metric', { symbol, metric:'all' });
@@ -834,13 +831,6 @@ async function scan(){
     renderQuote(q, symbol);
   }catch(e){
     document.getElementById('quoteArea').innerHTML=`<div class="empty">${e.message}</div>`;
-  }
-
-  try{
-    const cal=await fetchEconomicCalendar();
-    renderCalendar(cal);
-  }catch(e){
-    document.getElementById('calendarArea').innerHTML=`<div class="empty">${e.message}</div>`;
   }
 
   const fundPanel=document.getElementById('fundamentalPanel');
