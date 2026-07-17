@@ -261,13 +261,13 @@ footer a{color:var(--neon);}
   </section>
 
   <section class="panel">
-    <h2>SESSION</h2>
+    <h2>// Info Krusial Trader</h2>
     <div class="grid" id="sessionArea"></div>
     <div class="data-grid" id="pivotArea" style="margin-top:14px;"></div>
   </section>
 
   <section class="panel">
-    <h2> Sinyal Aktif</h2>
+    <h2>// Sinyal Aktif</h2>
     <div id="signalArea"><div class="empty">Belum ada sinyal. Masukkan API key lalu klik "Scan Sinyal".</div></div>
   </section>
 
@@ -565,6 +565,7 @@ function buildSignal(candles, symbol){
     rsi:+curRsi.toFixed(1), atr:r(curAtr), confidence, reasons,
     macd:r(macdLine[n]), macdHist:r(curHist),
     bbUpper:r(curBbUpper), bbMid:r(curBbMid), bbLower:r(curBbLower), bbPos,
+    volPct:(curAtr/price*100).toFixed(2),
     time:new Date().toLocaleString('id-ID')
   };
 }
@@ -682,6 +683,7 @@ function renderSignal(sig, lot){
       <div class="cell"><div class="k">Lot Estimasi</div><div class="v">${lot ?? '-'}</div></div>
       <div class="cell"><div class="k">RSI14</div><div class="v">${sig.rsi}</div></div>
       <div class="cell"><div class="k">ATR14</div><div class="v">${sig.atr}</div></div>
+      <div class="cell"><div class="k">Volatilitas</div><div class="v" style="font-size:13px;">${sig.volPct}%</div></div>
       <div class="cell"><div class="k">MACD Hist</div><div class="v">${sig.macdHist}</div></div>
       <div class="cell"><div class="k">Bollinger</div><div class="v" style="font-size:12px;">${sig.bbPos}</div></div>
       <div class="cell"><div class="k">BB Upper</div><div class="v">${sig.bbUpper}</div></div>
@@ -850,6 +852,7 @@ async function scan(){
 window.addEventListener('resize', ()=>{ if(lastCandles && lastSignal) drawChart(lastCandles, lastSignal.symbol, lastSignal); });
 
 document.getElementById('scanBtn').addEventListener('click', scan);
+document.getElementById('symbol').addEventListener('change', scan);
 
 document.getElementById('copyBtn').addEventListener('click', ()=>{
   if(!lastSignal) return;
