@@ -139,6 +139,9 @@ footer a{color:var(--neon);}
 .news-item a:hover{color:var(--neon);}
 .news-tag{display:inline-block; font-size:9.5px; letter-spacing:.5px; padding:2px 6px; border-radius:3px; margin-right:7px; text-transform:uppercase; vertical-align:middle;}
 .news-tag.fed{background:rgba(255,206,69,.14); color:var(--amber); border:1px solid var(--amber);}
+.news-tag.data{background:rgba(58,161,255,.14); color:#3aa1ff; border:1px solid #3aa1ff;}
+.news-tag.commodity{background:rgba(0,255,157,.14); color:var(--neon); border:1px solid var(--neon);}
+.news-tag.geo{background:rgba(255,46,99,.14); color:var(--red); border:1px solid var(--red);}
 .news-tag.gen{background:rgba(0,255,157,.1); color:var(--neon); border:1px solid var(--border);}
 .news-time{color:var(--muted); font-size:10px;}
 
@@ -155,10 +158,35 @@ footer a{color:var(--neon);}
   display:flex; align-items:center; z-index:1;
 }
 .ticker-track{flex:1; overflow:hidden; white-space:nowrap; position:relative; height:100%; display:flex; align-items:center;}
-.ticker-move{display:inline-block; white-space:nowrap; animation:ticker 110s linear infinite; padding-left:100%;}
+.ticker-move{display:inline-block; white-space:nowrap; animation:ticker var(--ticker-duration,110s) linear infinite; padding-left:100%;}
 .ticker-move span{margin-right:36px; font-size:11.5px; color:var(--neon);}
 .ticker-move span.fed-hl{color:var(--amber);}
+.ticker-track:hover .ticker-move, .ticker-track.paused .ticker-move{animation-play-state:paused;}
 @keyframes ticker{ from{transform:translateX(0);} to{transform:translateX(-100%);} }
+
+/* quota panel */
+.quota-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;}
+.quota-cell{flex:1; min-width:130px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:9px 11px;}
+.quota-cell .k{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
+.quota-bar{height:5px; background:rgba(255,255,255,.06); border-radius:3px; margin-top:6px; overflow:hidden;}
+.quota-bar i{display:block; height:100%; background:var(--neon); transition:width .4s;}
+.quota-bar.warn i{background:var(--amber);}
+.quota-bar.crit i{background:var(--red);}
+.quota-num{font-size:13px; font-weight:700; margin-top:2px;}
+.fresh-badge{display:inline-block; font-size:9.5px; padding:2px 7px; border-radius:10px; margin-left:8px; vertical-align:middle; border:1px solid var(--border); color:var(--muted);}
+.fresh-badge.live{color:var(--neon); border-color:var(--neon);}
+
+/* session countdown */
+.sess-cell .cd{font-size:9.5px; color:var(--muted); margin-top:3px;}
+.sess-cell.active .cd{color:var(--neon);}
+
+/* chart toolbar */
+.chart-toolbar{display:flex; gap:6px; margin-bottom:8px;}
+.chart-toolbar button{padding:5px 10px; font-size:10px;}
+.chart-toolbar button.active{background:var(--neon);}
+.chart-toolbar button:not(.active){background:transparent; border:1px solid var(--border); color:var(--muted);}
+.crosshair-box{position:absolute; background:#04100a; border:1px solid var(--neon); border-radius:4px; padding:6px 9px; font-size:10.5px; line-height:1.5; pointer-events:none; z-index:2; white-space:nowrap; display:none;}
+.chart-wrap{position:relative;}
 </style>
 </head>
 <body>
@@ -175,6 +203,16 @@ footer a{color:var(--neon);}
     ⚠ BUKAN NASIHAT KEUANGAN. Sinyal dihasilkan murni dari indikator teknikal (EMA/RSI/ATR), bukan jaminan profit.
     Trading forex & logam mengandung risiko kehilangan modal. Uji di akun demo sebelum live, dan gunakan money management yang wajar.
   </div>
+
+  <section class="panel">
+    <h2>// Kuota API Harian</h2>
+    <div class="quota-row" id="quotaArea">
+      <div class="quota-cell"><div class="k">Twelve Data</div><div class="quota-num" id="quotaTdNum">-/800</div><div class="quota-bar" id="quotaTdBar"><i style="width:0%"></i></div></div>
+      <div class="quota-cell"><div class="k">Finnhub</div><div class="quota-num" id="quotaFhNum">-</div></div>
+      <div class="quota-cell"><div class="k">Marketaux (opsional)</div><div class="quota-num" id="quotaMxNum">-</div></div>
+    </div>
+    <div class="meta" style="margin-top:8px;">Cache server dibagi ke semua pengunjung — request upstream hanya jalan kalau cache kedaluwarsa, bukan setiap kali ada yang buka halaman.</div>
+  </section>
 
   <section class="panel">
     <h2>// Konfigurasi</h2>
@@ -251,7 +289,7 @@ footer a{color:var(--neon);}
   </section>
 
   <section class="panel">
-    <h2>// Harga Real-Time (Quote)</h2>
+    <h2 style="display:inline-block;">// Harga Real-Time (Quote)</h2><span class="fresh-badge" id="quoteFresh">-</span>
     <div class="data-grid" id="quoteArea"><div class="empty">Klik "Scan Sinyal" untuk memuat harga real-time.</div></div>
   </section>
 
@@ -262,10 +300,19 @@ footer a{color:var(--neon);}
         <span><span class="dot" style="background:var(--neon);"></span>EMA9</span>
         <span><span class="dot" style="background:var(--amber);"></span>EMA21</span>
         <span><span class="dot" style="background:#3aa1ff;"></span>Candle</span>
+        <span><span class="dot" style="background:rgba(0,255,157,.15);"></span>Bollinger</span>
         <span><span class="dot" style="background:var(--red);"></span>SL/TP</span>
       </div>
     </div>
-    <canvas id="priceChart"></canvas>
+    <div class="chart-toolbar" id="chartZoom">
+      <button data-len="30">30</button>
+      <button data-len="60" class="active">60</button>
+      <button data-len="100">100</button>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="priceChart"></canvas>
+      <div class="crosshair-box" id="crossBox"></div>
+    </div>
   </section>
 
   <section class="panel">
@@ -321,6 +368,7 @@ footer a{color:var(--neon);}
   <footer>
     Perlu API key gratis: <a href="https://twelvedata.com/pricing" target="_blank" rel="noopener">twelvedata.com</a> (free tier ±800 request/hari)
     dan <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io</a> untuk news.
+    Opsional: <a href="https://www.marketaux.com/" target="_blank" rel="noopener">marketaux.com</a> (set env <code>MARKETAUX_KEY</code>) untuk cakupan news lebih luas — kalau tidak di-set, situs tetap jalan normal cuma dari Finnhub.
     Lot size adalah estimasi (asumsi 1 lot = 100.000 unit FX / 100 oz XAU) — sesuaikan dengan spesifikasi kontrak broker Anda sebelum eksekusi di MT5.
   </footer>
 </div>
@@ -476,25 +524,45 @@ function calcPivots(prevDay, symbol){
   return { pp:r(pp), r1:r(2*pp-l), r2:r(pp+(h-l)), s1:r(2*pp-h), s2:r(pp-(h-l)) };
 }
 
-/* ============ Market session clock ============ */
+/* ============ Market session clock (dengan countdown presisi) ============
+   Range jam UTC per sesi. Countdown dihitung ke batas buka/tutup terdekat,
+   di-refresh tiap detik (client-side murni, tidak ada request API). */
+const SESSION_RANGES=[
+  {name:'Sydney', start:21, end:6},
+  {name:'Tokyo', start:0, end:9},
+  {name:'London', start:7, end:16},
+  {name:'New York', start:12, end:21},
+];
+function fmtDur(ms){
+  const s=Math.max(0,Math.floor(ms/1000));
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  return `${h>0?h+'j ':''}${m}m ${sec}d`;
+}
+function nextBoundary(now, hourUTC){
+  const d=new Date(now);
+  d.setUTCHours(hourUTC,0,0,0);
+  if(d<=now) d.setUTCDate(d.getUTCDate()+1);
+  return d;
+}
 function updateSessionClock(){
-  const h=new Date().getUTCHours();
-  const sessions=[
-    {name:'Sydney', active: h>=21 || h<6},
-    {name:'Tokyo', active: h>=0 && h<9},
-    {name:'London', active: h>=7 && h<16},
-    {name:'New York', active: h>=12 && h<21},
-  ];
+  const now=new Date();
+  const h=now.getUTCHours();
   const area=document.getElementById('sessionArea');
-  area.innerHTML=sessions.map(s=>`
-    <div class="sess-cell ${s.active?'active':''}">
+  area.innerHTML=SESSION_RANGES.map(s=>{
+    const active = s.start>s.end ? (h>=s.start || h<s.end) : (h>=s.start && h<s.end);
+    const boundaryHour = active ? s.end : s.start;
+    const remain=nextBoundary(now, boundaryHour) - now;
+    return `
+    <div class="sess-cell ${active?'active':''}">
       <div class="k">${s.name}</div>
-      <div class="v">${s.active?'BUKA':'TUTUP'}</div>
-    </div>`).join('') +
+      <div class="v">${active?'BUKA':'TUTUP'}</div>
+      <div class="cd">${active?'Tutup dlm ':'Buka dlm '}${fmtDur(remain)}</div>
+    </div>`;
+  }).join('') +
     (h>=12 && h<16 ? '<div class="overlap-note">⚡ Overlap London/New York — likuiditas & volatilitas tertinggi hari ini.</div>' :
      h>=7 && h<9 ? '<div class="overlap-note">⚡ Overlap Tokyo/London — volatilitas mulai naik.</div>' : '');
 }
-setInterval(updateSessionClock, 60000);
+setInterval(updateSessionClock, 1000);
 updateSessionClock();
 
 /* ============ Decimals per symbol ============ */
@@ -594,10 +662,14 @@ function drawChart(candles, symbol, sig){
   ctx.clearRect(0,0,cssW,cssH);
 
   const closes=candles.map(c=>c.close);
+  const highs=candles.map(c=>c.high), lows=candles.map(c=>c.low);
   const ema9=ema(closes,9), ema21=ema(closes,21);
-  const view=candles.slice(-60);
+  const bbFull=bollinger(closes,20,2);
+  const viewLen=(typeof chartViewLen!=='undefined')?chartViewLen:60;
+  const view=candles.slice(-viewLen);
   const off=candles.length-view.length;
-  const ema9v=ema9.slice(-60), ema21v=ema21.slice(-60);
+  const ema9v=ema9.slice(-viewLen), ema21v=ema21.slice(-viewLen);
+  const bbUpperV=bbFull.upper.slice(-viewLen), bbLowerV=bbFull.lower.slice(-viewLen);
 
   const pad={l:8,r:52,t:14,b:18};
   const plotW=cssW-pad.l-pad.r, plotH=cssH-pad.t-pad.b;
@@ -617,6 +689,16 @@ function drawChart(candles, symbol, sig){
     ctx.beginPath(); ctx.moveTo(pad.l,gy); ctx.lineTo(cssW-pad.r,gy); ctx.stroke();
     ctx.fillStyle='var(--muted)'; ctx.fillStyle='#5f8f7a'; ctx.font='9px JetBrains Mono';
     ctx.fillText((hi-(hi-lo)*i/4).toFixed(decimalsFor(symbol)), cssW-pad.r+6, gy+3);
+  }
+
+  // Bollinger band shading (digambar di belakang candle)
+  if(bbUpperV[0]!=null){
+    ctx.beginPath();
+    bbUpperV.forEach((v,i)=>{ if(v==null) return; const px=x(i), py=y(v); i===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+    for(let i=bbLowerV.length-1;i>=0;i--){ if(bbLowerV[i]==null) continue; ctx.lineTo(x(i), y(bbLowerV[i])); }
+    ctx.closePath();
+    ctx.fillStyle='rgba(0,255,157,.05)';
+    ctx.fill();
   }
 
   // candles
@@ -654,6 +736,14 @@ function drawChart(candles, symbol, sig){
     levelLine(sig.entry, '#ffffff', 'ENTRY');
     levelLine(sig.sl, '#ff2e63', 'SL');
     levelLine(sig.tp1, '#00ff9d', 'TP1');
+  }
+
+  // crosshair vertikal (kalau user hover/touch chart)
+  if(typeof crosshairIdx==='number' && crosshairIdx>=0 && crosshairIdx<view.length){
+    const cxPos=x(crosshairIdx);
+    ctx.strokeStyle='rgba(201,255,224,.35)'; ctx.setLineDash([3,3]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cxPos,pad.t); ctx.lineTo(cxPos,cssH-pad.b); ctx.stroke();
+    ctx.setLineDash([]);
   }
 }
 
@@ -722,37 +812,96 @@ function pushHistory(sig){
     </tr>`).join('');
 }
 
-/* ============ News: Fed & liquidity ============ */
-const FED_KEYWORDS=['fed','fomc','powell','rate','interest rate','inflation','liquidity','qt','qe','treasury','yield','dollar','cpi','jobs report','nonfarm'];
-function tagFed(headline){
+/* ============ News: kategorisasi komprehensif + multi-sumber ============
+   Kategori diperluas dari sekadar FED/GENERAL jadi 4 tag supaya lebih
+   informatif buat konteks forex & metal:
+   - FED/BANK SENTRAL: kebijakan moneter, suku bunga, Powell/ECB/BOE
+   - DATA EKONOMI: rilis data makro terjadwal (NFP, CPI, GDP, dst)
+   - KOMODITAS: berita emas/perak/minyak (relevan untuk XAU/XAG)
+   - GEOPOLITIK: sanksi, konflik, perang dagang -> pemicu risk-on/off
+   - GENERAL: sisanya
+   Sumber: Finnhub (utama, sudah ada key) + Marketaux (opsional, kalau
+   MARKETAUX_KEY di-set di server) untuk cakupan lebih luas & dedupe
+   otomatis by headline supaya list tidak dobel dari 2 sumber. */
+const NEWS_CATEGORIES=[
+  { tag:'fed', label:'FED/BANK SENTRAL', cls:'fed', keywords:['fed','fomc','powell','rate cut','rate hike','interest rate','central bank','ecb','boe','boj','qt','qe','treasury','yield'] },
+  { tag:'data', label:'DATA EKONOMI', cls:'data', keywords:['cpi','inflation','nonfarm','jobs report','gdp','pmi','unemployment','payroll','retail sales'] },
+  { tag:'commodity', label:'KOMODITAS', cls:'commodity', keywords:['gold','silver','xau','xag','oil','opec','bullion','precious metal'] },
+  { tag:'geo', label:'GEOPOLITIK', cls:'geo', keywords:['war','sanction','tariff','conflict','geopolitic','trade war','ceasefire'] },
+];
+function tagCategory(headline){
   const h=headline.toLowerCase();
-  return FED_KEYWORDS.some(k=>h.includes(k));
+  for(const c of NEWS_CATEGORIES) if(c.keywords.some(k=>h.includes(k))) return c;
+  return { tag:'gen', label:'MARKET', cls:'gen' };
 }
-async function fetchNews(){
+function normalizeHeadline(h){
+  return h.toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,80);
+}
+async function fetchFinnhubNews(){
   const json=await fhRequest('news', { category:'forex' });
-  if(!Array.isArray(json)) throw new Error('Gagal memuat news. Cek API key Finnhub.');
+  if(!Array.isArray(json)) throw new Error('Finnhub: gagal memuat news.');
   return json.slice(0,25).map(n=>({
     headline:n.headline, url:n.url, source:n.source,
-    time:new Date(n.datetime*1000).toLocaleString('id-ID'),
-    fed: tagFed(n.headline)
+    ts:n.datetime*1000
   }));
+}
+async function fetchMarketauxNews(){
+  // Sumber tambahan opsional. Kalau MARKETAUX_KEY belum di-set di server,
+  // proxy akan balikin error -> ditangkap & diabaikan (graceful degrade),
+  // jadi tidak wajib untuk situs tetap jalan.
+  const json=await tdRequestGeneric('mx', 'news/all', { search:'forex OR dollar OR "interest rate" OR gold OR fed', language:'en', limit:20 });
+  if(!json || !Array.isArray(json.data)) throw new Error('Marketaux: tidak tersedia.');
+  return json.data.map(n=>({
+    headline:n.title, url:n.url, source:n.source||'Marketaux',
+    ts:new Date(n.published_at).getTime()
+  }));
+}
+async function tdRequestGeneric(provider, endpoint, params){
+  const qs=new URLSearchParams({provider, endpoint, ...params});
+  const res=await fetch(`/api/proxy?${qs.toString()}`);
+  return res.json();
+}
+async function fetchNews(){
+  const results=await Promise.allSettled([fetchFinnhubNews(), fetchMarketauxNews()]);
+  const combined=[];
+  const seen=new Set();
+  for(const r of results){
+    if(r.status!=='fulfilled') continue;
+    for(const n of r.value){
+      const key=normalizeHeadline(n.headline);
+      if(seen.has(key)) continue;
+      seen.add(key);
+      const cat=tagCategory(n.headline);
+      combined.push({ ...n, ...cat, timeLabel:new Date(n.ts).toLocaleString('id-ID') });
+    }
+  }
+  if(!combined.length && results.every(r=>r.status==='rejected')){
+    throw new Error('Gagal memuat news dari semua sumber. Cek API key.');
+  }
+  combined.sort((a,b)=>b.ts-a.ts);
+  return combined.slice(0,30);
 }
 function renderNews(items){
   const area=document.getElementById('newsArea');
   if(!items.length){ area.innerHTML='<div class="empty">Tidak ada berita ditemukan.</div>'; return; }
-  const fedItems=items.filter(n=>n.fed).slice(0,8);
-  const list=fedItems.length?fedItems:items.slice(0,8);
-  area.innerHTML=list.map(n=>`
+  const priority=items.filter(n=>n.tag!=='gen').slice(0,10);
+  const list=priority.length?priority:items.slice(0,10);
+  area.innerHTML=`<div class="meta" style="margin-bottom:8px;">${items.length} berita · diperbarui ${new Date().toLocaleTimeString('id-ID')} · sumber: ${[...new Set(items.map(n=>n.source))].slice(0,4).join(', ')}</div>` +
+    list.map(n=>`
     <div class="news-item">
-      <span class="news-tag ${n.fed?'fed':'gen'}">${n.fed?'FED/LIQUIDITY':'MARKET'}</span>
+      <span class="news-tag ${n.cls}">${n.label}</span>
       <a href="${n.url}" target="_blank" rel="noopener">${n.headline}</a>
-      <div class="news-time">${n.source} · ${n.time}</div>
+      <div class="news-time">${n.source} · ${n.timeLabel}</div>
     </div>`).join('');
 }
 function renderTicker(items){
   const move=document.getElementById('tickerMove');
   if(!items.length) return;
-  move.innerHTML=items.map(n=>`<span class="${n.fed?'fed-hl':''}">${n.fed?'⚡ FED: ':'▸ '}${n.headline}</span>`).join('');
+  // durasi animasi disesuaikan jumlah item, biar kecepatan baca konsisten
+  // (dulu fixed 110s: kalau item dikit jadi kepencet2, kalau banyak kelamaan)
+  const duration=Math.max(50, Math.min(220, items.length*7));
+  document.documentElement.style.setProperty('--ticker-duration', duration+'s');
+  move.innerHTML=items.slice(0,20).map(n=>`<span class="${n.tag!=='gen'?'fed-hl':''}">${n.tag!=='gen'?'⚡ '+n.label+': ':'▸ '}${n.headline}</span>`).join('');
 }
 
 /* ============ Quote real-time (harga sekarang, spesifik) ============ */
@@ -761,9 +910,17 @@ async function fetchQuote(symbol){
   if(json.status==='error' || !json.close) throw new Error(json.message || 'Gagal ambil quote real-time.');
   return json;
 }
+function renderFreshBadge(elId, meta){
+  const el=document.getElementById(elId);
+  if(!el) return;
+  if(!meta){ el.textContent='-'; el.className='fresh-badge'; return; }
+  if(!meta.cached){ el.textContent='LIVE'; el.className='fresh-badge live'; }
+  else{ el.textContent=`cache ${Math.round(meta.ageMs/1000)}d`; el.className='fresh-badge'; }
+}
 function renderQuote(q, symbol){
   const dec=decimalsFor(symbol);
   const chg=+q.change, chgPct=+q.percent_change;
+  renderFreshBadge('quoteFresh', q._cacheMeta);
   document.getElementById('quoteArea').innerHTML=`
     <div class="cell"><div class="k">Harga Sekarang</div><div class="v">${(+q.close).toFixed(dec)}</div></div>
     <div class="cell"><div class="k">Open</div><div class="v">${(+q.open).toFixed(dec)}</div></div>
@@ -882,21 +1039,97 @@ document.getElementById('copyBtn').addEventListener('click', ()=>{
   setTimeout(()=>btn.textContent=old, 1200);
 });
 
+/* ============ Ticker: tap untuk pause (baca sambil scroll di HP) ============ */
+const tickerTrackEl=document.querySelector('.ticker-track');
+if(tickerTrackEl){
+  tickerTrackEl.addEventListener('touchstart', ()=>tickerTrackEl.classList.add('paused'), {passive:true});
+  tickerTrackEl.addEventListener('touchend', ()=>setTimeout(()=>tickerTrackEl.classList.remove('paused'), 2500));
+}
+
+/* ============ Kuota API harian (dibaca dari counter server, shared semua visitor) ============ */
+async function pollQuota(){
+  try{
+    const res=await fetch('/api/proxy?provider=quota&action=get');
+    const j=await res.json();
+    const pct=Math.min(100,(j.td/ (j.limit||800))*100);
+    const bar=document.getElementById('quotaTdBar');
+    bar.className='quota-bar'+(pct>=90?' crit':pct>=65?' warn':'');
+    bar.querySelector('i').style.width=pct+'%';
+    document.getElementById('quotaTdNum').textContent=`${j.td}/${j.limit||800}`;
+    document.getElementById('quotaFhNum').textContent=`${j.fh} request`;
+    document.getElementById('quotaMxNum').textContent=`${j.mx||0} request`;
+  }catch(e){ /* quota panel opsional, diamkan kalau gagal */ }
+}
+setInterval(pollQuota, 60000);
+pollQuota();
+
+/* ============ Chart zoom toolbar ============ */
+let chartViewLen=60;
+document.getElementById('chartZoom').addEventListener('click', (e)=>{
+  const btn=e.target.closest('button[data-len]');
+  if(!btn) return;
+  chartViewLen=+btn.dataset.len;
+  [...document.querySelectorAll('#chartZoom button')].forEach(b=>b.classList.toggle('active', b===btn));
+  if(lastCandles) drawChart(lastCandles, lastSignal?.symbol, lastSignal);
+});
+
+/* ============ Crosshair interaktif di chart ============ */
+const chartCanvasEl=document.getElementById('priceChart');
+const crossBoxEl=document.getElementById('crossBox');
+let crosshairIdx=null;
+function handlePointer(clientX, clientY){
+  if(!lastCandles) return;
+  const rect=chartCanvasEl.getBoundingClientRect();
+  const relX=clientX-rect.left;
+  const view=lastCandles.slice(-chartViewLen);
+  const idx=Math.round((relX/rect.width)*(view.length-1));
+  crosshairIdx=Math.max(0,Math.min(view.length-1,idx));
+  drawChart(lastCandles, lastSignal?.symbol, lastSignal);
+  const c=view[crosshairIdx];
+  if(c){
+    const dec=decimalsFor(lastSignal?.symbol||'');
+    crossBoxEl.style.display='block';
+    crossBoxEl.style.left=Math.min(rect.width-140, Math.max(4, relX+8))+'px';
+    crossBoxEl.style.top='8px';
+    crossBoxEl.innerHTML=`${c.time}<br>O ${c.open.toFixed(dec)} H ${c.high.toFixed(dec)}<br>L ${c.low.toFixed(dec)} C ${c.close.toFixed(dec)}`;
+  }
+}
+chartCanvasEl.addEventListener('mousemove', (e)=>handlePointer(e.clientX, e.clientY));
+chartCanvasEl.addEventListener('mouseleave', ()=>{ crosshairIdx=null; crossBoxEl.style.display='none'; if(lastCandles) drawChart(lastCandles, lastSignal?.symbol, lastSignal); });
+chartCanvasEl.addEventListener('touchmove', (e)=>{ const t=e.touches[0]; if(t) handlePointer(t.clientX, t.clientY); }, {passive:true});
+chartCanvasEl.addEventListener('touchend', ()=>{ crosshairIdx=null; crossBoxEl.style.display='none'; if(lastCandles) drawChart(lastCandles, lastSignal?.symbol, lastSignal); });
+
+/* ============ Service worker (app-shell cache, offline-friendly) ============ */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('/sw.js').catch(()=>{}); });
+}
+
 /* ============ Visitor presence & auto-scan saat ada pengunjung ============
    - Setiap tab mengirim "ping" heartbeat ke /api/proxy (presence tracker
      in-memory di server). Refresh (scan) langsung dijalankan begitu
      halaman dibuka/link diklik.
    - Selama minimal 1 pengunjung terdeteksi aktif, sistem auto-scan ulang
-     tiap 1 menit TANPA BATAS jumlah — berhenti hanya kalau pengunjung
-     aktif jadi 0. */
+     TANPA BATAS jumlah — berhenti hanya kalau pengunjung aktif jadi 0.
+   - Interval auto-scan MENGIKUTI TIMEFRAME yang dipilih (bukan flat 60d):
+     candle M15 secara natural belum berubah tiap 1 menit, jadi scan tiap
+     1 menit untuk timeframe itu cuma buang-buang request. Selain itu
+     upstream sudah di-cache server-side (lihat api/proxy.js) jadi request
+     dari banyak pengunjung dengan timeframe sama pun tetap dihitung 1x
+     kuota per periode cache. */
+const AUTOSCAN_MS={'1min':30000,'5min':60000,'15min':5*60000,'1h':15*60000,'4h':30*60000,'1day':60*60000};
+function currentAutoscanMs(){
+  const iv=document.getElementById('interval').value;
+  return AUTOSCAN_MS[iv] || 60000;
+}
 const visitorId = sessionStorage.getItem('dtVisitorId')
   || (sessionStorage.setItem('dtVisitorId', crypto.randomUUID()), sessionStorage.getItem('dtVisitorId'));
 let visitorAutoCount = 0;
 let visitorAutoTimer = null;
 
 function setVisitorStatus(count, extra){
+  const nextS=Math.round(currentAutoscanMs()/1000);
   document.getElementById('visitorStatus').textContent =
-    `Pengunjung aktif: ${count} · Auto-scan ke-${visitorAutoCount}${extra?(' · '+extra):''}`;
+    `Pengunjung aktif: ${count} · Auto-scan ke-${visitorAutoCount} · interval ${nextS}d${extra?(' · '+extra):''}`;
 }
 
 async function pingPresence(){
@@ -914,8 +1147,13 @@ async function visitorAutoLoop(){
   await scan();
   visitorAutoCount++;
   setVisitorStatus(count);
-  visitorAutoTimer=setTimeout(visitorAutoLoop, 60*1000);
+  visitorAutoTimer=setTimeout(visitorAutoLoop, currentAutoscanMs());
 }
+// ganti timeframe -> auto-scan langsung ikut interval baru (tanpa nunggu siklus lama habis)
+document.getElementById('interval').addEventListener('change', ()=>{
+  clearTimeout(visitorAutoTimer);
+  visitorAutoTimer=setTimeout(visitorAutoLoop, currentAutoscanMs());
+});
 
 // heartbeat ringan tiap 20 detik biar tetap terhitung "aktif" walau belum auto-scan lagi
 setInterval(async ()=>{ const c=await pingPresence(); setVisitorStatus(c); }, 20*1000);
