@@ -21,15 +21,14 @@
 }
 *{box-sizing:border-box; margin:0; padding:0;}
 body{
-  background:var(--bg);
+  background:
+    linear-gradient(180deg, rgba(6,10,8,.90), rgba(6,10,8,.95)),
+    url('assets/bg.jpg') center/cover fixed no-repeat;
   color:var(--text);
   font-family:'JetBrains Mono',monospace;
   min-height:100vh;
   overflow-x:hidden;
   position:relative;
-}
-canvas#matrix{
-  position:fixed; inset:0; z-index:0; opacity:.14; pointer-events:none;
 }
 .wrap{position:relative; z-index:1; max-width:920px; margin:0 auto; padding:24px 16px 60px;}
 body{padding-bottom:34px;}
@@ -154,20 +153,20 @@ footer a{color:var(--neon);}
   display:flex; align-items:center; z-index:1;
 }
 .ticker-track{flex:1; overflow:hidden; white-space:nowrap; position:relative; height:100%; display:flex; align-items:center;}
-.ticker-move{display:inline-block; white-space:nowrap; animation:ticker 45s linear infinite; padding-left:100%;}
+.ticker-move{display:inline-block; white-space:nowrap; animation:ticker 110s linear infinite; padding-left:100%;}
 .ticker-move span{margin-right:36px; font-size:11.5px; color:var(--neon);}
 .ticker-move span.fed-hl{color:var(--amber);}
 @keyframes ticker{ from{transform:translateX(0);} to{transform:translateX(-100%);} }
 </style>
 </head>
 <body>
-<canvas id="matrix"></canvas>
 <div class="wrap">
 
   <header>
     <h1>SIGNAL::ENGINE</h1>
-    <div class="sub">FOREX & METAL — TECHNICAL SIGNAL GENERATOR</div>
+    <div class="sub">FOREX & METAL & SAHAM NASDAQ — TECHNICAL SIGNAL GENERATOR</div>
     <div class="boot" id="bootLine"></div>
+    <div class="sub" id="visitorStatus"></div>
   </header>
 
   <div class="risk-banner">
@@ -185,13 +184,29 @@ footer a{color:var(--neon);}
       <div>
         <label>Pair</label>
         <select id="symbol">
-          <option value="EUR/USD">EUR/USD</option>
-          <option value="GBP/USD">GBP/USD</option>
-          <option value="USD/JPY">USD/JPY</option>
-          <option value="AUD/USD">AUD/USD</option>
-          <option value="USD/CHF">USD/CHF</option>
-          <option value="XAU/USD" selected>XAU/USD (Gold)</option>
-          <option value="XAG/USD">XAG/USD (Silver)</option>
+          <optgroup label="Forex Major">
+            <option value="EUR/USD">EUR/USD</option>
+            <option value="GBP/USD">GBP/USD</option>
+            <option value="USD/JPY">USD/JPY</option>
+            <option value="USD/CHF">USD/CHF</option>
+            <option value="AUD/USD">AUD/USD</option>
+            <option value="USD/CAD">USD/CAD</option>
+            <option value="NZD/USD">NZD/USD</option>
+          </optgroup>
+          <optgroup label="Metal">
+            <option value="XAU/USD" selected>XAU/USD (Gold)</option>
+            <option value="XAG/USD">XAG/USD (Silver)</option>
+          </optgroup>
+          <optgroup label="Saham Nasdaq">
+            <option value="AAPL">AAPL — Apple</option>
+            <option value="MSFT">MSFT — Microsoft</option>
+            <option value="NVDA">NVDA — Nvidia</option>
+            <option value="AMZN">AMZN — Amazon</option>
+            <option value="GOOGL">GOOGL — Alphabet</option>
+            <option value="META">META — Meta</option>
+            <option value="TSLA">TSLA — Tesla</option>
+            <option value="NDX">NDX — Nasdaq 100 Index</option>
+          </optgroup>
         </select>
       </div>
       <div>
@@ -310,30 +325,6 @@ async function fhRequest(endpoint, params){
   return res.json();
 }
 
-/* ============ Matrix rain (signature bg) ============ */
-(function(){
-  const c=document.getElementById('matrix'), ctx=c.getContext('2d');
-  let w,h,cols,drops;
-  function resize(){
-    w=c.width=window.innerWidth; h=c.height=window.innerHeight;
-    cols=Math.floor(w/16); drops=Array(cols).fill(1);
-  }
-  resize(); window.addEventListener('resize',resize);
-  const chars='01アイウエオカキクケコサシスセソ$€¥';
-  function draw(){
-    ctx.fillStyle='rgba(6,10,8,0.08)'; ctx.fillRect(0,0,w,h);
-    ctx.fillStyle='#00ff9d'; ctx.font='14px monospace';
-    for(let i=0;i<drops.length;i++){
-      const ch=chars[Math.floor(Math.random()*chars.length)];
-      ctx.fillText(ch, i*16, drops[i]*16);
-      if(drops[i]*16>h && Math.random()>0.975) drops[i]=0;
-      drops[i]++;
-    }
-    requestAnimationFrame(draw); // recursive render loop
-  }
-  draw();
-})();
-
 /* ============ Boot line typewriter ============ */
 (function(){
   const el=document.getElementById('bootLine');
@@ -380,6 +371,26 @@ function atr(highs, lows, closes, period=14){
     ));
   }
   return ema(tr, period);
+}
+
+/* ============ MACD & Bollinger Bands (data tambahan) ============ */
+function macd(closes, fast=12, slow=26, signalPeriod=9){
+  const emaFast=ema(closes,fast), emaSlow=ema(closes,slow);
+  const macdLine=emaFast.map((v,i)=>v-emaSlow[i]);
+  const signalLine=ema(macdLine, signalPeriod);
+  const hist=macdLine.map((v,i)=>v-signalLine[i]);
+  return { macdLine, signalLine, hist };
+}
+function bollinger(closes, period=20, mult=2){
+  const upper=[], mid=[], lower=[];
+  for(let i=0;i<closes.length;i++){
+    if(i<period-1){ upper.push(null); mid.push(null); lower.push(null); continue; }
+    const slice=closes.slice(i-period+1,i+1);
+    const m=slice.reduce((a,b)=>a+b,0)/period;
+    const sd=Math.sqrt(slice.reduce((a,b)=>a+(b-m)**2,0)/period);
+    mid.push(m); upper.push(m+mult*sd); lower.push(m-mult*sd);
+  }
+  return { upper, mid, lower };
 }
 
 /* ============ ADX / trend strength ============ */
@@ -450,11 +461,13 @@ function decimalsFor(sym){
   if(sym==='USD/JPY') return 3;
   if(sym==='XAU/USD') return 2;
   if(sym==='XAG/USD') return 3;
+  if(!sym.includes('/')) return 2; // saham/index Nasdaq
   return 5;
 }
 function contractSizeFor(sym){
   if(sym==='XAU/USD') return 100;   // 1 lot = 100 oz (umum)
   if(sym==='XAG/USD') return 5000;  // 1 lot = 5000 oz (umum, cek broker)
+  if(!sym.includes('/')) return 1;  // saham/index: 1 lot = 1 lembar/unit
   return 100000;                    // 1 lot standar FX
 }
 
@@ -475,6 +488,8 @@ function buildSignal(candles, symbol){
   const ema9=ema(closes,9), ema21=ema(closes,21);
   const rsiArr=rsi(closes,14);
   const atrArr=atr(highs,lows,closes,14);
+  const { macdLine, signalLine, hist }=macd(closes);
+  const bb=bollinger(closes,20,2);
 
   const n=closes.length-1;
   const price=closes[n];
@@ -482,6 +497,8 @@ function buildSignal(candles, symbol){
   const prevDiff=ema9[n-1]-ema21[n-1];
   const curDiff=ema9[n]-ema21[n];
   const curRsi=rsiArr[n];
+  const curHist=hist[n], prevHist=hist[n-1];
+  const curBbUpper=bb.upper[n], curBbLower=bb.lower[n], curBbMid=bb.mid[n];
 
   let direction='HOLD', reasons=[];
   if(prevDiff<=0 && curDiff>0 && curRsi<70){
@@ -498,8 +515,11 @@ function buildSignal(candles, symbol){
     if(curRsi>45 && curRsi<65 && direction==='BUY') score++;
     if(curRsi<55 && curRsi>35 && direction==='SELL') score++;
     if(Math.abs(curDiff)>curAtr*0.05) score++;
-    confidence = score>=3?'TINGGI':score===2?'SEDANG':'RENDAH';
+    if(direction==='BUY' && curHist>0 && curHist>prevHist){ score++; reasons.push('MACD histogram menguat'); }
+    if(direction==='SELL' && curHist<0 && curHist<prevHist){ score++; reasons.push('MACD histogram melemah'); }
+    confidence = score>=4?'TINGGI':score>=2?'SEDANG':'RENDAH';
   }
+  const bbPos = price>=curBbUpper?'DI ATAS BAND ATAS' : price<=curBbLower?'DI BAWAH BAND BAWAH' : 'DALAM BAND';
 
   const dec=decimalsFor(symbol);
   const r=(x)=>+x.toFixed(dec);
@@ -515,6 +535,8 @@ function buildSignal(candles, symbol){
   return {
     symbol, direction, entry:r(entry), sl, tp1, tp2, tp3,
     rsi:+curRsi.toFixed(1), atr:r(curAtr), confidence, reasons,
+    macd:r(macdLine[n]), macdHist:r(curHist),
+    bbUpper:r(curBbUpper), bbMid:r(curBbMid), bbLower:r(curBbLower), bbPos,
     time:new Date().toLocaleString('id-ID')
   };
 }
@@ -632,6 +654,10 @@ function renderSignal(sig, lot){
       <div class="cell"><div class="k">Lot Estimasi</div><div class="v">${lot ?? '-'}</div></div>
       <div class="cell"><div class="k">RSI14</div><div class="v">${sig.rsi}</div></div>
       <div class="cell"><div class="k">ATR14</div><div class="v">${sig.atr}</div></div>
+      <div class="cell"><div class="k">MACD Hist</div><div class="v">${sig.macdHist}</div></div>
+      <div class="cell"><div class="k">Bollinger</div><div class="v" style="font-size:12px;">${sig.bbPos}</div></div>
+      <div class="cell"><div class="k">BB Upper</div><div class="v">${sig.bbUpper}</div></div>
+      <div class="cell"><div class="k">BB Lower</div><div class="v">${sig.bbLower}</div></div>
     </div>
     <div class="meta" style="margin-top:8px;">${sig.reasons.join(' · ')}</div>`;
   document.getElementById('copyBtn').disabled=false;
@@ -713,7 +739,9 @@ async function scan(){
     try{
       const prevDay=await fetchPrevDay(symbol);
       const piv=calcPivots(prevDay, symbol);
+      const chgPct=(((sig.entry-(+prevDay.close))/(+prevDay.close))*100).toFixed(2);
       document.getElementById('pivotArea').innerHTML+=`
+        <div class="cell"><div class="k">Perubahan Harian</div><div class="v ${chgPct>=0?'tp':'sl'}">${chgPct>=0?'+':''}${chgPct}%</div></div>
         <div class="cell"><div class="k">Pivot (PP)</div><div class="v">${piv.pp}</div></div>
         <div class="cell"><div class="k">Resistance 1</div><div class="v tp">${piv.r1}</div></div>
         <div class="cell"><div class="k">Resistance 2</div><div class="v tp">${piv.r2}</div></div>
@@ -764,6 +792,49 @@ document.getElementById('autoToggle').addEventListener('change', (e)=>{
   clearTimeout(autoTimer);
   if(e.target.checked) autoLoop();
 });
+
+/* ============ Visitor presence & auto-scan saat ada pengunjung ============
+   - Setiap tab mengirim "ping" heartbeat ke /api/proxy (presence tracker
+     in-memory di server). Refresh (scan) langsung dijalankan begitu
+     halaman dibuka/link diklik.
+   - Selama minimal 1 pengunjung terdeteksi aktif, sistem auto-scan ulang
+     tiap 1 menit, maksimal 5 kali. Berhenti lebih awal kalau pengunjung
+     aktif jadi 0. */
+const visitorId = sessionStorage.getItem('dtVisitorId')
+  || (sessionStorage.setItem('dtVisitorId', crypto.randomUUID()), sessionStorage.getItem('dtVisitorId'));
+const VISITOR_AUTO_MAX = 5;
+let visitorAutoCount = 0;
+let visitorAutoTimer = null;
+
+function setVisitorStatus(count, extra){
+  document.getElementById('visitorStatus').textContent =
+    `Pengunjung aktif: ${count} · Auto-scan: ${visitorAutoCount}/${VISITOR_AUTO_MAX}${extra?(' · '+extra):''}`;
+}
+
+async function pingPresence(){
+  try{
+    const res=await fetch(`/api/proxy?provider=presence&action=ping&id=${visitorId}`);
+    const json=await res.json();
+    return json.count ?? 0;
+  }catch(e){ return 0; }
+}
+
+async function visitorAutoLoop(){
+  const count=await pingPresence();
+  if(count<1){ setVisitorStatus(0,'berhenti (0 pengunjung)'); clearTimeout(visitorAutoTimer); return; }
+  if(visitorAutoCount>=VISITOR_AUTO_MAX){ setVisitorStatus(count,'batas 5x tercapai'); clearTimeout(visitorAutoTimer); return; }
+  setVisitorStatus(count);
+  await scan();
+  visitorAutoCount++;
+  setVisitorStatus(count);
+  visitorAutoTimer=setTimeout(visitorAutoLoop, 60*1000);
+}
+
+// heartbeat ringan tiap 20 detik biar tetap terhitung "aktif" walau belum auto-scan lagi
+setInterval(async ()=>{ const c=await pingPresence(); setVisitorStatus(c); }, 20*1000);
+
+// refresh langsung begitu halaman dibuka / link diklik, lalu mulai loop auto-scan
+pingPresence().then(c=>{ setVisitorStatus(c); scan(); visitorAutoLoop(); });
 </script>
 </body>
 </html>
