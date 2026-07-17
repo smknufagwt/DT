@@ -235,13 +235,14 @@ footer a{color:var(--neon);}
     </div>
     <div class="row">
       <button id="scanBtn">Scan Sinyal</button>
-      <button class="ghost" id="copyBtn" disabled>Copy untuk MT5</button>
-      <label class="toggle">
-        <input type="checkbox" id="autoToggle">
-        Auto-refresh (loop rekursif sesuai timeframe)
-      </label>
+      <button class="ghost" id="copyBtn" disabled>Copy Rencana Trading</button>
     </div>
     <div class="error" id="errBox"></div>
+  </section>
+
+  <section class="panel">
+    <h2>// Harga Real-Time (Quote)</h2>
+    <div class="data-grid" id="quoteArea"><div class="empty">Klik "Scan Sinyal" untuk memuat harga real-time.</div></div>
   </section>
 
   <section class="panel">
@@ -280,6 +281,16 @@ footer a{color:var(--neon);}
   <section class="panel">
     <h2>// Fed & Liquidity Watch</h2>
     <div id="newsArea"><div class="empty">Masukkan Finnhub API key untuk memuat berita Fed & likuiditas pasar.</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>// Kalender Ekonomi (Fundamental Makro)</h2>
+    <div id="calendarArea"><div class="empty">Memuat event ekonomi high-impact 7 hari ke depan...</div></div>
+  </section>
+
+  <section class="panel" id="fundamentalPanel" style="display:none;">
+    <h2>// Fundamental Saham (Mikro)</h2>
+    <div class="data-grid" id="fundamentalArea"></div>
   </section>
 
   <footer>
@@ -712,6 +723,62 @@ function renderTicker(items){
   move.innerHTML=items.map(n=>`<span class="${n.fed?'fed-hl':''}">${n.fed?'⚡ FED: ':'▸ '}${n.headline}</span>`).join('');
 }
 
+/* ============ Quote real-time (harga sekarang, spesifik) ============ */
+async function fetchQuote(symbol){
+  const json=await tdRequest('quote', { symbol });
+  if(json.status==='error' || !json.close) throw new Error(json.message || 'Gagal ambil quote real-time.');
+  return json;
+}
+function renderQuote(q, symbol){
+  const dec=decimalsFor(symbol);
+  const chg=+q.change, chgPct=+q.percent_change;
+  document.getElementById('quoteArea').innerHTML=`
+    <div class="cell"><div class="k">Harga Sekarang</div><div class="v">${(+q.close).toFixed(dec)}</div></div>
+    <div class="cell"><div class="k">Open</div><div class="v">${(+q.open).toFixed(dec)}</div></div>
+    <div class="cell"><div class="k">High Hari Ini</div><div class="v tp">${(+q.high).toFixed(dec)}</div></div>
+    <div class="cell"><div class="k">Low Hari Ini</div><div class="v sl">${(+q.low).toFixed(dec)}</div></div>
+    <div class="cell"><div class="k">Prev. Close</div><div class="v">${(+q.previous_close).toFixed(dec)}</div></div>
+    <div class="cell"><div class="k">Perubahan</div><div class="v ${chg>=0?'tp':'sl'}">${chg>=0?'+':''}${chg.toFixed(dec)}</div></div>
+    <div class="cell"><div class="k">Perubahan %</div><div class="v ${chgPct>=0?'tp':'sl'}">${chgPct>=0?'+':''}${chgPct.toFixed(2)}%</div></div>
+    <div class="cell"><div class="k">Update</div><div class="v" style="font-size:11px;">${q.datetime||'-'}</div></div>`;
+}
+
+/* ============ Kalender ekonomi (fundamental makro) ============ */
+async function fetchEconomicCalendar(){
+  const from=new Date().toISOString().slice(0,10);
+  const to=new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
+  const json=await fhRequest('calendar/economic', { from, to });
+  const items=json && json.economicCalendar;
+  if(!Array.isArray(items)) throw new Error('Kalender ekonomi tidak tersedia (butuh akses Finnhub tertentu).');
+  return items.filter(e=>e.impact==='high' || e.impact==='medium').slice(0,12);
+}
+function renderCalendar(items){
+  const area=document.getElementById('calendarArea');
+  if(!items.length){ area.innerHTML='<div class="empty">Tidak ada event high/medium-impact dalam 7 hari ke depan.</div>'; return; }
+  area.innerHTML=items.map(e=>`
+    <div class="news-item">
+      <span class="news-tag ${e.impact==='high'?'fed':'gen'}">${(e.impact||'').toUpperCase()}</span>
+      ${e.country||''} — ${e.event||'-'}
+      <div class="news-time">Perkiraan: ${e.time||'-'} · Estimate: ${e.estimate??'-'} · Prev: ${e.prev??'-'}</div>
+    </div>`).join('');
+}
+
+/* ============ Fundamental saham (mikro, khusus simbol saham/index) ============ */
+async function fetchStockFundamentals(symbol){
+  const json=await fhRequest('stock/metric', { symbol, metric:'all' });
+  if(!json || !json.metric) throw new Error('Fundamental tidak tersedia untuk simbol ini.');
+  return json.metric;
+}
+function renderFundamentals(m){
+  document.getElementById('fundamentalArea').innerHTML=`
+    <div class="cell"><div class="k">P/E (TTM)</div><div class="v">${m.peTTM ?? '-'}</div></div>
+    <div class="cell"><div class="k">EPS (TTM)</div><div class="v">${m.epsTTM ?? '-'}</div></div>
+    <div class="cell"><div class="k">52W High</div><div class="v tp">${m['52WeekHigh'] ?? '-'}</div></div>
+    <div class="cell"><div class="k">52W Low</div><div class="v sl">${m['52WeekLow'] ?? '-'}</div></div>
+    <div class="cell"><div class="k">Beta</div><div class="v">${m.beta ?? '-'}</div></div>
+    <div class="cell"><div class="k">Dividend Yield</div><div class="v">${m.dividendYieldIndicatedAnnual ?? '-'}</div></div>`;
+}
+
 /* ============ Main scan ============ */
 async function scan(){
   const symbol=document.getElementById('symbol').value;
@@ -761,6 +828,33 @@ async function scan(){
   }catch(e){
     document.getElementById('newsArea').innerHTML=`<div class="empty">${e.message}</div>`;
   }
+
+  try{
+    const q=await fetchQuote(symbol);
+    renderQuote(q, symbol);
+  }catch(e){
+    document.getElementById('quoteArea').innerHTML=`<div class="empty">${e.message}</div>`;
+  }
+
+  try{
+    const cal=await fetchEconomicCalendar();
+    renderCalendar(cal);
+  }catch(e){
+    document.getElementById('calendarArea').innerHTML=`<div class="empty">${e.message}</div>`;
+  }
+
+  const fundPanel=document.getElementById('fundamentalPanel');
+  if(!symbol.includes('/')){
+    fundPanel.style.display='block';
+    try{
+      const m=await fetchStockFundamentals(symbol);
+      renderFundamentals(m);
+    }catch(e){
+      document.getElementById('fundamentalArea').innerHTML=`<div class="empty">${e.message}</div>`;
+    }
+  } else {
+    fundPanel.style.display='none';
+  }
 }
 
 window.addEventListener('resize', ()=>{ if(lastCandles && lastSignal) drawChart(lastCandles, lastSignal.symbol, lastSignal); });
@@ -770,27 +864,12 @@ document.getElementById('scanBtn').addEventListener('click', scan);
 document.getElementById('copyBtn').addEventListener('click', ()=>{
   if(!lastSignal) return;
   const s=lastSignal;
-  const text=`${s.symbol} ${s.direction}\nEntry: ${s.entry}\nSL: ${s.sl}\nTP1: ${s.tp1}\nTP2: ${s.tp2}\nTP3: ${s.tp3}\nLot est.: ${s.lot ?? '-'}\nConfidence: ${s.confidence}\n(${s.time})`;
+  const rr = s.sl!=null ? (Math.abs(s.tp1-s.entry)/Math.abs(s.entry-s.sl)).toFixed(1) : '-';
+  const text=`${s.symbol} ${s.direction} (${s.time})\nEntry: ${s.entry}\nSL: ${s.sl}\nTP1: ${s.tp1} (RR 1:${rr})\nTP2: ${s.tp2}\nTP3: ${s.tp3}\nLot est.: ${s.lot ?? '-'}\nConfidence: ${s.confidence}\nRSI14: ${s.rsi} · MACD Hist: ${s.macdHist} · Bollinger: ${s.bbPos}`;
   navigator.clipboard.writeText(text);
   const btn=document.getElementById('copyBtn');
   const old=btn.textContent; btn.textContent='Copied!';
   setTimeout(()=>btn.textContent=old, 1200);
-});
-
-/* ============ Auto-refresh: recursive polling loop ============ */
-const intervalMs={ '5min':5*60*1000, '15min':15*60*1000, '1h':60*60*1000, '4h':4*60*60*1000 };
-let autoTimer=null;
-function autoLoop(){
-  scan().finally(()=>{
-    if(document.getElementById('autoToggle').checked){
-      const iv=intervalMs[document.getElementById('interval').value];
-      autoTimer=setTimeout(autoLoop, iv); // memanggil dirinya sendiri -> loop rekursif
-    }
-  });
-}
-document.getElementById('autoToggle').addEventListener('change', (e)=>{
-  clearTimeout(autoTimer);
-  if(e.target.checked) autoLoop();
 });
 
 /* ============ Visitor presence & auto-scan saat ada pengunjung ============
@@ -798,17 +877,16 @@ document.getElementById('autoToggle').addEventListener('change', (e)=>{
      in-memory di server). Refresh (scan) langsung dijalankan begitu
      halaman dibuka/link diklik.
    - Selama minimal 1 pengunjung terdeteksi aktif, sistem auto-scan ulang
-     tiap 1 menit, maksimal 5 kali. Berhenti lebih awal kalau pengunjung
+     tiap 1 menit TANPA BATAS jumlah — berhenti hanya kalau pengunjung
      aktif jadi 0. */
 const visitorId = sessionStorage.getItem('dtVisitorId')
   || (sessionStorage.setItem('dtVisitorId', crypto.randomUUID()), sessionStorage.getItem('dtVisitorId'));
-const VISITOR_AUTO_MAX = 5;
 let visitorAutoCount = 0;
 let visitorAutoTimer = null;
 
 function setVisitorStatus(count, extra){
   document.getElementById('visitorStatus').textContent =
-    `Pengunjung aktif: ${count} · Auto-scan: ${visitorAutoCount}/${VISITOR_AUTO_MAX}${extra?(' · '+extra):''}`;
+    `Pengunjung aktif: ${count} · Auto-scan ke-${visitorAutoCount}${extra?(' · '+extra):''}`;
 }
 
 async function pingPresence(){
@@ -822,7 +900,6 @@ async function pingPresence(){
 async function visitorAutoLoop(){
   const count=await pingPresence();
   if(count<1){ setVisitorStatus(0,'berhenti (0 pengunjung)'); clearTimeout(visitorAutoTimer); return; }
-  if(visitorAutoCount>=VISITOR_AUTO_MAX){ setVisitorStatus(count,'batas 5x tercapai'); clearTimeout(visitorAutoTimer); return; }
   setVisitorStatus(count);
   await scan();
   visitorAutoCount++;
