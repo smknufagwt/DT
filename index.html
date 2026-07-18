@@ -1047,7 +1047,7 @@ async function scan(){
   }
 
   try{
-    const cotRows=await fetchCOT(symbol);
+    const cotRows=await fetchCOTCached(symbol);
     renderCOT(cotRows, symbol);
   }catch(e){
     document.getElementById('cotArea').innerHTML=`<div class="empty">${e.message}</div>`;
@@ -1096,12 +1096,39 @@ if(tickerTrackEl){
    yang paling umum dipakai analis retail. Commercial = hedger (produsen/end-user),
    arahnya sering berlawanan (mereka hedging, bukan spekulasi arah).
    Ambil 2 baris terakhir buat hitung delta net position minggu-ke-minggu. */
+const cotCache = {}; // symbol -> { ts, rows } — cache di-key SYMBOL saja, bukan timeframe
+const COT_CLIENT_TTL = 6*60*60*1000; // 6 jam (CFTC cuma rilis mingguan)
+
 async function fetchCOT(symbol){
   const market=cotMarketFor(symbol);
   if(!market) return null; // saham/index: skip, tidak relevan
-  const json=await tdRequestGeneric('cot', '', { market, limit:2 });
+  const json=await tdRequestGeneric('cot', '', { market, limit:26 }); // 26w buat COT Index
   if(!Array.isArray(json) || !json.length) throw new Error('Data COT tidak tersedia untuk instrumen ini.');
   return json;
+}
+async function fetchCOTCached(symbol){
+  if(!cotMarketFor(symbol)) return null;
+  const now=Date.now();
+  const c=cotCache[symbol];
+  if(c && (now-c.ts)<COT_CLIENT_TTL) return c.rows; // ganti timeframe pakai cache ini, tidak fetch ulang
+  const rows=await fetchCOT(symbol);
+  cotCache[symbol]={ ts:now, rows };
+  return rows;
+}
+function sparklineSVG(nets){
+  const arr=nets.slice().reverse(); // oldest -> newest
+  if(arr.length<2) return '';
+  const w=200,h=36,pad=2;
+  const lo=Math.min(...arr), hi=Math.max(...arr);
+  const range=(hi-lo)||1;
+  const step=(w-pad*2)/(arr.length-1);
+  const pts=arr.map((v,i)=>`${(pad+i*step).toFixed(1)},${(h-pad-((v-lo)/range)*(h-pad*2)).toFixed(1)}`).join(' ');
+  const zeroY=h-pad-((0-lo)/range)*(h-pad*2);
+  const trendUp=arr[arr.length-1]>=arr[0];
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="36" preserveAspectRatio="none" style="display:block;margin-top:8px;">
+    <line x1="0" y1="${zeroY.toFixed(1)}" x2="${w}" y2="${zeroY.toFixed(1)}" stroke="rgba(255,255,255,.15)" stroke-dasharray="2,2"/>
+    <polyline points="${pts}" fill="none" stroke="${trendUp?'var(--primary)':'var(--red)'}" stroke-width="1.6"/>
+  </svg>`;
 }
 function renderCOT(rows, symbol){
   const area=document.getElementById('cotArea');
@@ -1110,34 +1137,59 @@ function renderCOT(rows, symbol){
     document.getElementById('cotFresh').textContent='-';
     return;
   }
-  const cur=rows[0], prev=rows[1];
+  const nets=rows.map(r=>(+r.noncomm_positions_long_all)-(+r.noncomm_positions_short_all));
+  const cur=rows[0];
   const ncLong=+cur.noncomm_positions_long_all, ncShort=+cur.noncomm_positions_short_all;
   const cLong=+cur.comm_positions_long_all, cShort=+cur.comm_positions_short_all;
-  const ncNet=ncLong-ncShort, cNet=cLong-cShort;
+  const ncNet=nets[0], cNet=cLong-cShort;
   const ncTotal=ncLong+ncShort || 1;
   const ncLongPct=(ncLong/ncTotal*100).toFixed(0);
+
   let deltaHtml='';
-  if(prev){
-    const prevNet=(+prev.noncomm_positions_long_all)-(+prev.noncomm_positions_short_all);
-    const delta=ncNet-prevNet;
+  if(nets.length>1){
+    const delta=ncNet-nets[1];
     deltaHtml=`<div class="sm-delta ${delta>=0?'up':'down'}">${delta>=0?'▲ +':'▼ '}${delta.toLocaleString('id-ID')} kontrak vs minggu lalu</div>`;
   }
+
+  // COT Index (Stephen Briese): net saat ini dinormalisasi 0-100 vs rentang lookback -> deteksi positioning ekstrem
+  let cotIndexHtml='';
+  if(nets.length>=8){
+    const lo=Math.min(...nets), hi=Math.max(...nets);
+    const idx = hi>lo ? ((ncNet-lo)/(hi-lo)*100) : 50;
+    const extreme = idx>=80 ? 'long' : idx<=20 ? 'short' : null;
+    cotIndexHtml=`
+    <div class="sm-cell">
+      <div class="k">COT Index (${nets.length}w)</div>
+      <div class="sm-num">${idx.toFixed(0)}/100</div>
+      <div class="meta" style="margin-top:7px;">${extreme==='long' ? '⚠ Positioning speculator ekstrem LONG — risiko reversal/profit-taking naik.' : extreme==='short' ? '⚠ Positioning speculator ekstrem SHORT — risiko short-covering naik.' : 'Netral, belum di zona ekstrem (20-80).'}</div>
+    </div>`;
+  }
+
+  // Streak: berapa minggu beruntun net searah dgn minggu ini (proxy kekuatan tren institusional)
+  let streak=1;
+  for(let i=1;i<nets.length;i++){
+    if((nets[i]>=0)===(ncNet>=0)) streak++; else break;
+  }
+
   area.innerHTML=`
     <div class="sm-cell">
       <div class="k">Non-Commercial (Smart Money) Net</div>
       <div class="sm-num ${ncNet>=0?'long':'short'}">${ncNet>=0?'LONG ':'SHORT '}${Math.abs(ncNet).toLocaleString('id-ID')}</div>
       <div class="sm-split"><div class="long-part" style="width:${ncLongPct}%"></div><div class="short-part" style="width:${100-ncLongPct}%"></div></div>
       ${deltaHtml}
+      <div class="meta" style="margin-top:5px;">${streak} minggu beruntun searah${streak>=4?' (tren kuat)':''}</div>
+      ${sparklineSVG(nets)}
     </div>
     <div class="sm-cell">
       <div class="k">Commercial (Hedger) Net</div>
       <div class="sm-num ${cNet>=0?'long':'short'}">${cNet>=0?'LONG ':'SHORT '}${Math.abs(cNet).toLocaleString('id-ID')}</div>
       <div class="meta" style="margin-top:7px;">Biasanya berlawanan arah dgn speculator — sisi hedging, bukan spekulasi tren.</div>
     </div>
+    ${cotIndexHtml}
     <div class="sm-cell">
       <div class="k">Laporan Per Tanggal</div>
       <div class="sm-num" style="font-size:13px;">${cur.report_date_as_yyyy_mm_dd?.slice(0,10) || '-'}</div>
-      <div class="meta" style="margin-top:7px;">Update mingguan (Jumat), rilis CFTC resmi & gratis.</div>
+      <div class="meta" style="margin-top:7px;">Update mingguan (Jumat), rilis CFTC resmi & gratis. Cache per pair, independen dari timeframe candle.</div>
     </div>`;
   document.getElementById('cotFresh').textContent = 'CFTC';
 }
