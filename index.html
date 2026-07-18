@@ -8,22 +8,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#060a08;
-  --panel:#0c1310;
-  --panel2:#0f1a15;
-  --neon:#00ff9d;
-  --neon-dim:#0a3a26;
+  --bg:#000000;
+  --panel:#0a0a0a;
+  --panel2:#141414;
+  --primary:#f2f2f2;
+  --primary-dim:#2e2e2e;
   --red:#ff2e63;
   --amber:#ffce45;
-  --text:#c9ffe0;
-  --muted:#5f8f7a;
-  --border:rgba(0,255,157,.18);
+  --text:#e8e8e8;
+  --muted:#7a7a7a;
+  --border:rgba(255,255,255,.18);
 }
 *{box-sizing:border-box; margin:0; padding:0;}
 body{
-  background:
-    linear-gradient(180deg, rgba(6,10,8,.90), rgba(6,10,8,.95)),
-    url('assets/bg.jpg') center/cover fixed no-repeat;
+  background:var(--bg);
   color:var(--text);
   font-family:'JetBrains Mono',monospace;
   min-height:100vh;
@@ -37,16 +35,16 @@ body{padding-bottom:34px;}
 header{margin-bottom:22px;}
 h1{
   font-family:'Orbitron',sans-serif; font-weight:900; font-size:clamp(22px,5vw,34px);
-  letter-spacing:1px; color:var(--neon);
-  text-shadow:0 0 8px rgba(0,255,157,.55), 0 0 22px rgba(0,255,157,.25);
+  letter-spacing:1px; color:var(--primary);
+  text-shadow:0 0 8px rgba(255,255,255,.55), 0 0 22px rgba(255,255,255,.25);
   animation:flicker 4s infinite;
 }
 @keyframes flicker{
   0%,96%,100%{opacity:1;} 97%{opacity:.75;} 98%{opacity:1;} 99%{opacity:.85;}
 }
 .sub{color:var(--muted); font-size:12px; margin-top:4px;}
-.boot{font-size:12px; color:var(--neon-dim); margin-top:10px; min-height:16px;}
-.boot::after{content:'▋'; color:var(--neon); animation:blink 1s step-end infinite;}
+.boot{font-size:12px; color:var(--primary-dim); margin-top:10px; min-height:16px;}
+.boot::after{content:'▋'; color:var(--primary); animation:blink 1s step-end infinite;}
 @keyframes blink{50%{opacity:0;}}
 
 .risk-banner{
@@ -60,7 +58,7 @@ h1{
   padding:18px; margin-bottom:18px;
 }
 .panel h2{
-  font-family:'Orbitron',sans-serif; font-size:13px; color:var(--neon); letter-spacing:1.5px;
+  font-family:'Orbitron',sans-serif; font-size:13px; color:var(--primary); letter-spacing:1.5px;
   margin-bottom:14px; text-transform:uppercase;
 }
 .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px;}
@@ -70,20 +68,20 @@ input,select{
   font-family:'JetBrains Mono',monospace; font-size:13px; padding:9px 10px; border-radius:4px;
   outline:none;
 }
-input:focus,select:focus{border-color:var(--neon);}
+input:focus,select:focus{border-color:var(--primary);}
 .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px;}
 .toggle{display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--muted); cursor:pointer;}
 .toggle input{width:auto;}
 
 button{
   font-family:'Orbitron',sans-serif; font-weight:700; letter-spacing:1px; font-size:12.5px;
-  background:var(--neon); color:#031510; border:none; padding:11px 18px; border-radius:4px;
+  background:var(--primary); color:#000000; border:none; padding:11px 18px; border-radius:4px;
   cursor:pointer; text-transform:uppercase;
 }
 button:hover{filter:brightness(1.1);}
 button:disabled{opacity:.5; cursor:not-allowed;}
 button.ghost{
-  background:transparent; border:1px solid var(--border); color:var(--neon);
+  background:transparent; border:1px solid var(--border); color:var(--primary);
 }
 
 /* signal card */
@@ -91,7 +89,7 @@ button.ghost{
   display:inline-block; font-family:'Orbitron',sans-serif; font-weight:900; font-size:22px;
   padding:8px 18px; border-radius:4px; letter-spacing:2px;
 }
-.badge.buy{background:rgba(0,255,157,.12); color:var(--neon); border:1px solid var(--neon); text-shadow:0 0 10px rgba(0,255,157,.6);}
+.badge.buy{background:rgba(255,255,255,.12); color:var(--primary); border:1px solid var(--primary); text-shadow:0 0 10px rgba(255,255,255,.6);}
 .badge.sell{background:rgba(255,46,99,.12); color:var(--red); border:1px solid var(--red); text-shadow:0 0 10px rgba(255,46,99,.6);}
 .badge.hold{background:rgba(255,206,69,.1); color:var(--amber); border:1px solid var(--amber);}
 
@@ -103,7 +101,7 @@ button.ghost{
 .cell .k{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
 .cell .v{font-size:16px; font-weight:700; margin-top:3px; overflow-wrap:break-word; word-break:break-word;}
 .cell .v.sl{color:var(--red);}
-.cell .v.tp{color:var(--neon);}
+.cell .v.tp{color:var(--primary);}
 
 .empty{color:var(--muted); font-size:12.5px; padding:10px 0;}
 .error{color:var(--red); font-size:12px; margin-top:10px;}
@@ -113,16 +111,16 @@ table{width:100%; min-width:520px; border-collapse:collapse; font-size:10px; mar
 table th, table td{white-space:nowrap;}
 th,td{padding:7px 8px; text-align:left; border-bottom:1px solid var(--border);}
 th{color:var(--muted); font-weight:500; text-transform:uppercase; font-size:10px;}
-td.buy{color:var(--neon);} td.sell{color:var(--red);}
+td.buy{color:var(--primary);} td.sell{color:var(--red);}
 
 footer{text-align:center; font-size:10.5px; color:var(--muted); margin-top:26px; line-height:1.7; padding-bottom:34px;}
-footer a{color:var(--neon);}
+footer a{color:var(--primary);}
 
 .sess-cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px; text-align:center;}
-.sess-cell.active{border-color:var(--neon); box-shadow:0 0 10px rgba(0,255,157,.25);}
+.sess-cell.active{border-color:var(--primary); box-shadow:0 0 10px rgba(255,255,255,.25);}
 .sess-cell .k{font-size:10px; color:var(--muted); text-transform:uppercase;}
 .sess-cell .v{font-size:13px; font-weight:700; margin-top:4px;}
-.sess-cell.active .v{color:var(--neon);}
+.sess-cell.active .v{color:var(--primary);}
 .overlap-note{font-size:11px; color:var(--amber); margin-top:10px;}
 
 /* chart */
@@ -130,62 +128,63 @@ footer a{color:var(--neon);}
 .chart-legend{font-size:10.5px; color:var(--muted); display:flex; gap:12px; flex-wrap:wrap;}
 .chart-legend span{display:inline-flex; align-items:center; gap:5px;}
 .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
-#priceChart{width:100%; height:280px; display:block; border-radius:4px; background:var(--panel2);}
+#priceChart{width:100%; height:340px; display:block; border-radius:4px; background:var(--panel2);}
 
 /* news */
 .news-item{border-bottom:1px solid var(--border); padding:10px 0; font-size:12px; line-height:1.5;}
 .news-item:last-child{border-bottom:none;}
 .news-item a{color:var(--text); text-decoration:none;}
-.news-item a:hover{color:var(--neon);}
+.news-item a:hover{color:var(--primary);}
 .news-tag{display:inline-block; font-size:9.5px; letter-spacing:.5px; padding:2px 6px; border-radius:3px; margin-right:7px; text-transform:uppercase; vertical-align:middle;}
 .news-tag.fed{background:rgba(255,206,69,.14); color:var(--amber); border:1px solid var(--amber);}
 .news-tag.data{background:rgba(58,161,255,.14); color:#3aa1ff; border:1px solid #3aa1ff;}
-.news-tag.commodity{background:rgba(0,255,157,.14); color:var(--neon); border:1px solid var(--neon);}
+.news-tag.commodity{background:rgba(255,255,255,.14); color:var(--primary); border:1px solid var(--primary);}
 .news-tag.geo{background:rgba(255,46,99,.14); color:var(--red); border:1px solid var(--red);}
-.news-tag.gen{background:rgba(0,255,157,.1); color:var(--neon); border:1px solid var(--border);}
+.news-tag.gen{background:rgba(255,255,255,.1); color:var(--primary); border:1px solid var(--border);}
 .news-time{color:var(--muted); font-size:10px;}
 
 /* marquee ticker */
 .ticker-bar{
   position:fixed; left:0; right:0; bottom:0; z-index:5;
-  background:#04100a; border-top:1px solid var(--neon);
-  box-shadow:0 -6px 18px rgba(0,255,157,.12);
+  background:#0a0a0a; border-top:1px solid var(--primary);
+  box-shadow:0 -6px 18px rgba(255,255,255,.12);
   display:flex; align-items:center; height:32px; overflow:hidden;
 }
 .ticker-label{
-  flex:0 0 auto; background:var(--neon); color:#031510; font-family:'Orbitron',sans-serif;
+  flex:0 0 auto; background:var(--primary); color:#000000; font-family:'Orbitron',sans-serif;
   font-weight:800; font-size:10.5px; letter-spacing:1px; padding:0 12px; height:100%;
   display:flex; align-items:center; z-index:1;
 }
 .ticker-track{flex:1; overflow:hidden; white-space:nowrap; position:relative; height:100%; display:flex; align-items:center;}
 .ticker-move{display:inline-block; white-space:nowrap; animation:ticker var(--ticker-duration,110s) linear infinite; padding-left:100%;}
-.ticker-move span{margin-right:36px; font-size:11.5px; color:var(--neon);}
+.ticker-move span{margin-right:36px; font-size:11.5px; color:var(--primary);}
 .ticker-move span.fed-hl{color:var(--amber);}
 .ticker-track:hover .ticker-move, .ticker-track.paused .ticker-move{animation-play-state:paused;}
 @keyframes ticker{ from{transform:translateX(0);} to{transform:translateX(-100%);} }
 
-/* quota panel */
-.quota-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;}
-.quota-cell{flex:1; min-width:130px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:9px 11px;}
-.quota-cell .k{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
-.quota-bar{height:5px; background:rgba(255,255,255,.06); border-radius:3px; margin-top:6px; overflow:hidden;}
-.quota-bar i{display:block; height:100%; background:var(--neon); transition:width .4s;}
-.quota-bar.warn i{background:var(--amber);}
-.quota-bar.crit i{background:var(--red);}
-.quota-num{font-size:13px; font-weight:700; margin-top:2px;}
+/* smart money / COT panel */
+.sm-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;}
+.sm-cell{flex:1; min-width:150px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px;}
+.sm-cell .k{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
+.sm-num{font-size:16px; font-weight:700; margin-top:3px;}
+.sm-num.long{color:var(--primary);} .sm-num.short{color:var(--red);}
+.sm-split{height:7px; border-radius:3px; margin-top:7px; overflow:hidden; display:flex; background:rgba(255,255,255,.06);}
+.sm-split .long-part{background:var(--primary);} .sm-split .short-part{background:var(--red);}
+.sm-delta{font-size:10.5px; margin-top:5px; color:var(--muted);}
+.sm-delta.up{color:var(--primary);} .sm-delta.down{color:var(--red);}
 .fresh-badge{display:inline-block; font-size:9.5px; padding:2px 7px; border-radius:10px; margin-left:8px; vertical-align:middle; border:1px solid var(--border); color:var(--muted);}
-.fresh-badge.live{color:var(--neon); border-color:var(--neon);}
+.fresh-badge.live{color:var(--primary); border-color:var(--primary);}
 
 /* session countdown */
 .sess-cell .cd{font-size:9.5px; color:var(--muted); margin-top:3px;}
-.sess-cell.active .cd{color:var(--neon);}
+.sess-cell.active .cd{color:var(--primary);}
 
 /* chart toolbar */
 .chart-toolbar{display:flex; gap:6px; margin-bottom:8px;}
 .chart-toolbar button{padding:5px 10px; font-size:10px;}
-.chart-toolbar button.active{background:var(--neon);}
+.chart-toolbar button.active{background:var(--primary);}
 .chart-toolbar button:not(.active){background:transparent; border:1px solid var(--border); color:var(--muted);}
-.crosshair-box{position:absolute; background:#04100a; border:1px solid var(--neon); border-radius:4px; padding:6px 9px; font-size:10.5px; line-height:1.5; pointer-events:none; z-index:2; white-space:nowrap; display:none;}
+.crosshair-box{position:absolute; background:#0a0a0a; border:1px solid var(--primary); border-radius:4px; padding:6px 9px; font-size:10.5px; line-height:1.5; pointer-events:none; z-index:2; white-space:nowrap; display:none;}
 .chart-wrap{position:relative;}
 </style>
 </head>
@@ -205,13 +204,9 @@ footer a{color:var(--neon);}
   </div>
 
   <section class="panel">
-    <h2>// Kuota API Harian</h2>
-    <div class="quota-row" id="quotaArea">
-      <div class="quota-cell"><div class="k">Twelve Data</div><div class="quota-num" id="quotaTdNum">-/800</div><div class="quota-bar" id="quotaTdBar"><i style="width:0%"></i></div></div>
-      <div class="quota-cell"><div class="k">Finnhub</div><div class="quota-num" id="quotaFhNum">-</div></div>
-      <div class="quota-cell"><div class="k">Marketaux (opsional)</div><div class="quota-num" id="quotaMxNum">-</div></div>
-    </div>
-    <div class="meta" style="margin-top:8px;">Cache server dibagi ke semua pengunjung — request upstream hanya jalan kalau cache kedaluwarsa, bukan setiap kali ada yang buka halaman.</div>
+    <h2 style="display:inline-block;">// Smart Money / COT Positioning</h2><span class="fresh-badge" id="cotFresh">-</span>
+    <div class="sm-row" id="cotArea"><div class="empty">Data CFTC (Commitment of Traders) dimuat saat scan sinyal.</div></div>
+    <div class="meta" style="margin-top:8px;">Sumber: CFTC Legacy Futures Only (mingguan, rilis tiap Jumat). Non-Commercial = large speculators/funds (sering disebut "smart money" di analisis retail); net posisi & perubahan mingguan jadi konfirmasi arah tren institusional, bukan sinyal entry langsung.</div>
   </section>
 
   <section class="panel">
@@ -297,10 +292,11 @@ footer a{color:var(--neon);}
     <div class="chart-head">
       <h2 style="margin-bottom:0;">// Grafik Harga</h2>
       <div class="chart-legend">
-        <span><span class="dot" style="background:var(--neon);"></span>EMA9</span>
+        <span><span class="dot" style="background:var(--primary);"></span>EMA9</span>
         <span><span class="dot" style="background:var(--amber);"></span>EMA21</span>
-        <span><span class="dot" style="background:#3aa1ff;"></span>Candle</span>
-        <span><span class="dot" style="background:rgba(0,255,157,.15);"></span>Bollinger</span>
+        <span><span class="dot" style="background:var(--primary);"></span>Candle Naik</span>
+        <span><span class="dot" style="background:var(--red);"></span>Candle Turun</span>
+        <span><span class="dot" style="background:rgba(255,255,255,.15);"></span>Bollinger</span>
         <span><span class="dot" style="background:var(--red);"></span>SL/TP</span>
       </div>
     </div>
@@ -573,6 +569,21 @@ function decimalsFor(sym){
   if(!sym.includes('/')) return 2; // saham/index Nasdaq
   return 5;
 }
+/* ============ Mapping simbol -> nama kontrak CFTC (buat data COT) ============ */
+function cotMarketFor(sym){
+  const m={
+    'EUR/USD':'EURO FX - CHICAGO MERCANTILE EXCHANGE',
+    'GBP/USD':'BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE',
+    'USD/JPY':'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE',
+    'USD/CHF':'SWISS FRANC - CHICAGO MERCANTILE EXCHANGE',
+    'AUD/USD':'AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE',
+    'USD/CAD':'CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE',
+    'NZD/USD':'NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE',
+    'XAU/USD':'GOLD - COMMODITY EXCHANGE INC.',
+    'XAG/USD':'SILVER - COMMODITY EXCHANGE INC.',
+  };
+  return m[sym] || null; // saham/index: tidak ada laporan COT yang relevan
+}
 function contractSizeFor(sym){
   if(sym==='XAU/USD') return 100;   // 1 lot = 100 oz (umum)
   if(sym==='XAG/USD') return 5000;  // 1 lot = 5000 oz (umum, cek broker)
@@ -683,13 +694,20 @@ function drawChart(candles, symbol, sig){
   const x=(i)=> pad.l + plotW*(i/(view.length-1||1));
 
   // grid
-  ctx.strokeStyle='rgba(0,255,157,.08)'; ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1;
   for(let i=0;i<=4;i++){
     const gy=pad.t+plotH*i/4;
     ctx.beginPath(); ctx.moveTo(pad.l,gy); ctx.lineTo(cssW-pad.r,gy); ctx.stroke();
-    ctx.fillStyle='var(--muted)'; ctx.fillStyle='#5f8f7a'; ctx.font='9px JetBrains Mono';
+    ctx.fillStyle='var(--muted)'; ctx.fillStyle='#7a7a7a'; ctx.font='9px JetBrains Mono';
     ctx.fillText((hi-(hi-lo)*i/4).toFixed(decimalsFor(symbol)), cssW-pad.r+6, gy+3);
   }
+
+  // watermark simbol (gaya terminal profesional)
+  ctx.save();
+  ctx.font='700 26px Orbitron, sans-serif';
+  ctx.fillStyle='rgba(255,255,255,.05)';
+  ctx.fillText(symbol||'', pad.l+10, cssH-pad.b-14);
+  ctx.restore();
 
   // Bollinger band shading (digambar di belakang candle)
   if(bbUpperV[0]!=null){
@@ -697,7 +715,7 @@ function drawChart(candles, symbol, sig){
     bbUpperV.forEach((v,i)=>{ if(v==null) return; const px=x(i), py=y(v); i===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
     for(let i=bbLowerV.length-1;i>=0;i--){ if(bbLowerV[i]==null) continue; ctx.lineTo(x(i), y(bbLowerV[i])); }
     ctx.closePath();
-    ctx.fillStyle='rgba(0,255,157,.05)';
+    ctx.fillStyle='rgba(255,255,255,.05)';
     ctx.fill();
   }
 
@@ -706,12 +724,26 @@ function drawChart(candles, symbol, sig){
   view.forEach((c,i)=>{
     const cx=x(i);
     const up=c.close>=c.open;
-    ctx.strokeStyle=ctx.fillStyle= up?'#3aa1ff':'#7d8fa8';
+    ctx.strokeStyle=ctx.fillStyle= up?'#f2f2f2':'#ff2e63';
     ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(cx,y(c.high)); ctx.lineTo(cx,y(c.low)); ctx.stroke();
     const oy=y(c.open), cy=y(c.close);
     ctx.fillRect(cx-cw/2, Math.min(oy,cy), cw, Math.max(1,Math.abs(cy-oy)));
   });
+
+  // garis harga terakhir + label axis kanan (khas TradingView)
+  const lastC=view[view.length-1];
+  if(lastC){
+    const ly=y(lastC.close);
+    const lastUp=lastC.close>=lastC.open;
+    ctx.strokeStyle=lastUp?'#f2f2f2':'#ff2e63'; ctx.setLineDash([2,3]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,ly); ctx.lineTo(cssW-pad.r,ly); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=lastUp?'#f2f2f2':'#ff2e63';
+    ctx.fillRect(cssW-pad.r,ly-7,pad.r,14);
+    ctx.fillStyle='#000000'; ctx.font='700 9.5px JetBrains Mono';
+    ctx.fillText(lastC.close.toFixed(decimalsFor(symbol)), cssW-pad.r+4, ly+3);
+  }
 
   // EMA lines
   function drawLine(arr, color){
@@ -719,7 +751,7 @@ function drawChart(candles, symbol, sig){
     arr.forEach((v,i)=>{ const px=x(i), py=y(v); i===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
     ctx.stroke();
   }
-  drawLine(ema9v, '#00ff9d');
+  drawLine(ema9v, '#f2f2f2');
   drawLine(ema21v, '#ffce45');
 
   // SL/TP/Entry lines
@@ -735,15 +767,21 @@ function drawChart(candles, symbol, sig){
   if(sig && sig.direction!=='HOLD'){
     levelLine(sig.entry, '#ffffff', 'ENTRY');
     levelLine(sig.sl, '#ff2e63', 'SL');
-    levelLine(sig.tp1, '#00ff9d', 'TP1');
+    levelLine(sig.tp1, '#f2f2f2', 'TP1');
   }
 
-  // crosshair vertikal (kalau user hover/touch chart)
+  // crosshair vertikal + horizontal (kalau user hover/touch chart)
   if(typeof crosshairIdx==='number' && crosshairIdx>=0 && crosshairIdx<view.length){
     const cxPos=x(crosshairIdx);
+    const chY=y(view[crosshairIdx].close);
     ctx.strokeStyle='rgba(201,255,224,.35)'; ctx.setLineDash([3,3]); ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(cxPos,pad.t); ctx.lineTo(cxPos,cssH-pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l,chY); ctx.lineTo(cssW-pad.r,chY); ctx.stroke();
     ctx.setLineDash([]);
+    ctx.fillStyle='#f2f2f2';
+    ctx.fillRect(cssW-pad.r,chY-7,pad.r,14);
+    ctx.fillStyle='#000000'; ctx.font='700 9.5px JetBrains Mono';
+    ctx.fillText(view[crosshairIdx].close.toFixed(decimalsFor(symbol)), cssW-pad.r+4, chY+3);
   }
 }
 
@@ -1008,6 +1046,13 @@ async function scan(){
     document.getElementById('quoteArea').innerHTML=`<div class="empty">${e.message}</div>`;
   }
 
+  try{
+    const cotRows=await fetchCOT(symbol);
+    renderCOT(cotRows, symbol);
+  }catch(e){
+    document.getElementById('cotArea').innerHTML=`<div class="empty">${e.message}</div>`;
+  }
+
   const fundPanel=document.getElementById('fundamentalPanel');
   if(!symbol.includes('/')){
     fundPanel.style.display='block';
@@ -1046,22 +1091,56 @@ if(tickerTrackEl){
   tickerTrackEl.addEventListener('touchend', ()=>setTimeout(()=>tickerTrackEl.classList.remove('paused'), 2500));
 }
 
-/* ============ Kuota API harian (dibaca dari counter server, shared semua visitor) ============ */
-async function pollQuota(){
-  try{
-    const res=await fetch('/api/proxy?provider=quota&action=get');
-    const j=await res.json();
-    const pct=Math.min(100,(j.td/ (j.limit||800))*100);
-    const bar=document.getElementById('quotaTdBar');
-    bar.className='quota-bar'+(pct>=90?' crit':pct>=65?' warn':'');
-    bar.querySelector('i').style.width=pct+'%';
-    document.getElementById('quotaTdNum').textContent=`${j.td}/${j.limit||800}`;
-    document.getElementById('quotaFhNum').textContent=`${j.fh} request`;
-    document.getElementById('quotaMxNum').textContent=`${j.mx||0} request`;
-  }catch(e){ /* quota panel opsional, diamkan kalau gagal */ }
+/* ============ Smart Money / COT Positioning (CFTC, mingguan) ============
+   Non-Commercial = large speculators/funds -> proxy "smart money" institusional
+   yang paling umum dipakai analis retail. Commercial = hedger (produsen/end-user),
+   arahnya sering berlawanan (mereka hedging, bukan spekulasi arah).
+   Ambil 2 baris terakhir buat hitung delta net position minggu-ke-minggu. */
+async function fetchCOT(symbol){
+  const market=cotMarketFor(symbol);
+  if(!market) return null; // saham/index: skip, tidak relevan
+  const json=await tdRequestGeneric('cot', '', { market, limit:2 });
+  if(!Array.isArray(json) || !json.length) throw new Error('Data COT tidak tersedia untuk instrumen ini.');
+  return json;
 }
-setInterval(pollQuota, 60000);
-pollQuota();
+function renderCOT(rows, symbol){
+  const area=document.getElementById('cotArea');
+  if(!rows){
+    area.innerHTML='<div class="empty">Laporan COT hanya tersedia untuk pair forex major & logam (bukan saham/index).</div>';
+    document.getElementById('cotFresh').textContent='-';
+    return;
+  }
+  const cur=rows[0], prev=rows[1];
+  const ncLong=+cur.noncomm_positions_long_all, ncShort=+cur.noncomm_positions_short_all;
+  const cLong=+cur.comm_positions_long_all, cShort=+cur.comm_positions_short_all;
+  const ncNet=ncLong-ncShort, cNet=cLong-cShort;
+  const ncTotal=ncLong+ncShort || 1;
+  const ncLongPct=(ncLong/ncTotal*100).toFixed(0);
+  let deltaHtml='';
+  if(prev){
+    const prevNet=(+prev.noncomm_positions_long_all)-(+prev.noncomm_positions_short_all);
+    const delta=ncNet-prevNet;
+    deltaHtml=`<div class="sm-delta ${delta>=0?'up':'down'}">${delta>=0?'▲ +':'▼ '}${delta.toLocaleString('id-ID')} kontrak vs minggu lalu</div>`;
+  }
+  area.innerHTML=`
+    <div class="sm-cell">
+      <div class="k">Non-Commercial (Smart Money) Net</div>
+      <div class="sm-num ${ncNet>=0?'long':'short'}">${ncNet>=0?'LONG ':'SHORT '}${Math.abs(ncNet).toLocaleString('id-ID')}</div>
+      <div class="sm-split"><div class="long-part" style="width:${ncLongPct}%"></div><div class="short-part" style="width:${100-ncLongPct}%"></div></div>
+      ${deltaHtml}
+    </div>
+    <div class="sm-cell">
+      <div class="k">Commercial (Hedger) Net</div>
+      <div class="sm-num ${cNet>=0?'long':'short'}">${cNet>=0?'LONG ':'SHORT '}${Math.abs(cNet).toLocaleString('id-ID')}</div>
+      <div class="meta" style="margin-top:7px;">Biasanya berlawanan arah dgn speculator — sisi hedging, bukan spekulasi tren.</div>
+    </div>
+    <div class="sm-cell">
+      <div class="k">Laporan Per Tanggal</div>
+      <div class="sm-num" style="font-size:13px;">${cur.report_date_as_yyyy_mm_dd?.slice(0,10) || '-'}</div>
+      <div class="meta" style="margin-top:7px;">Update mingguan (Jumat), rilis CFTC resmi & gratis.</div>
+    </div>`;
+  document.getElementById('cotFresh').textContent = 'CFTC';
+}
 
 /* ============ Chart zoom toolbar ============ */
 let chartViewLen=60;
