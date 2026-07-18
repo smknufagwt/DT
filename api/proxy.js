@@ -1,4 +1,4 @@
-Proxy · JS
+
 // Vercel Serverless Function: /api/proxy
 // Meneruskan request ke Twelve Data / Finnhub dengan API key dari
 // Environment Variables (di-set di dashboard Vercel). Key tidak pernah
