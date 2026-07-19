@@ -279,8 +279,29 @@ footer a{color:var(--primary);}
     <div class="row">
       <button id="scanBtn">Scan Sinyal</button>
       <button class="ghost" id="copyBtn" disabled>Copy Rencana Trading</button>
+      <button class="ghost" id="alertBtn">🔕 Aktifkan Alert</button>
     </div>
     <div class="error" id="errBox"></div>
+  </section>
+
+  <section class="panel">
+    <h2>// Risk Guard & Jurnal Harian</h2>
+    <div class="grid">
+      <div>
+        <label>Max Rugi Harian (R)</label>
+        <input id="maxLossR" type="number" value="3" min="0.5" step="0.5">
+      </div>
+    </div>
+    <div class="row">
+      <button class="ghost" data-log="1">+1R (TP1)</button>
+      <button class="ghost" data-log="2">+2R (TP2)</button>
+      <button class="ghost" data-log="3">+3R (TP3)</button>
+      <button class="ghost" data-log="-1">-1R (SL)</button>
+      <button class="ghost" id="resetJournalBtn">Reset Hari Ini</button>
+    </div>
+    <div class="data-grid" id="riskArea" style="margin-top:14px;"></div>
+    <div id="riskWarning"></div>
+    <div class="meta" style="margin-top:8px;">Log hasil trade manual (1R = risiko sesuai % saldo di atas). Tersimpan lokal di HP ini, reset otomatis tiap hari.</div>
   </section>
 
   <section class="panel">
@@ -320,6 +341,18 @@ footer a{color:var(--primary);}
     <h2>// Sinyal Aktif</h2>
     <div id="signalArea"><div class="empty">Belum ada sinyal. Masukkan API key lalu klik "Scan Sinyal".</div></div>
     <div class="data-grid" id="pivotArea" style="margin-top:14px;"></div>
+  </section>
+
+  <section class="panel">
+    <h2>// Konfirmasi Multi-Timeframe</h2>
+    <div class="data-grid" id="mtfArea"><div class="empty">Dimuat saat scan sinyal.</div></div>
+    <div class="meta" style="margin-top:8px;">Trend EMA9/21 + ADX di timeframe lebih besar dipakai sebagai filter arah — sinyal yang searah HTF lebih layak dipercaya, yang berlawanan otomatis diturunkan confidence-nya.</div>
+  </section>
+
+  <section class="panel">
+    <h2>// Backtest Ringan (100 Bar Terakhir)</h2>
+    <div class="data-grid" id="backtestArea"><div class="empty">Dimuat saat scan sinyal.</div></div>
+    <div class="meta" style="margin-top:8px;">Simulasi strategi EMA9/21 crossover + RSI pada 100 bar historis simbol/timeframe yang sama, TP1 (1:1) vs SL, lookahead 20 bar. Sample kecil — bukan jaminan performa live.</div>
   </section>
 
   <section class="panel">
@@ -986,6 +1019,152 @@ function renderFundamentals(m){
     <div class="cell"><div class="k">Dividend Yield</div><div class="v">${m.dividendYieldIndicatedAnnual ?? '-'}</div></div>`;
 }
 
+/* ============ Multi-timeframe confluence ============
+   Filter arah pakai trend EMA9/21 + ADX di timeframe lebih besar (HTF).
+   Cukup 1 fetch tambahan per scan, tetap kena cache server-side proxy.js
+   (TTL per interval) jadi aman kuota walau dipakai auto-scan terus. */
+const HTF_MAP={'1min':'15min','5min':'1h','15min':'1h','1h':'4h','4h':'1day','1day':'1day'};
+async function fetchHTFBias(symbol, baseInterval){
+  const htf=HTF_MAP[baseInterval] || '1h';
+  if(htf===baseInterval) return null;
+  const candles=await fetchCandles(symbol, htf);
+  const closes=candles.map(c=>c.close);
+  const e9=ema(closes,9), e21=ema(closes,21);
+  const n=closes.length-1;
+  const diff=e9[n]-e21[n];
+  const adxV=adxValue(candles.map(c=>c.high), candles.map(c=>c.low), closes);
+  return { interval:htf, direction: diff>0?'BUY':diff<0?'SELL':'NETRAL', adx:adxV };
+}
+function applyMTF(sig, htf){
+  if(!htf || sig.direction==='HOLD') return;
+  if(sig.direction===htf.direction && htf.adx>=20){
+    if(sig.confidence!=='TINGGI') sig.confidence='TINGGI';
+    sig.reasons.push(`✓ Searah tren HTF ${htf.interval.toUpperCase()} (ADX ${htf.adx.toFixed(0)})`);
+  } else if(htf.direction!=='NETRAL' && sig.direction!==htf.direction){
+    sig.confidence='RENDAH';
+    sig.reasons.push(`⚠ Berlawanan tren HTF ${htf.interval.toUpperCase()}`);
+  }
+}
+function renderMTF(htf, sig){
+  const el=document.getElementById('mtfArea');
+  if(!htf){ el.innerHTML='<div class="empty">Timeframe ini sudah paling besar, tidak ada HTF filter.</div>'; return; }
+  const aligned = sig.direction!=='HOLD' && sig.direction===htf.direction;
+  const statusColor = sig.direction==='HOLD' ? 'var(--muted)' : aligned ? 'var(--primary)' : 'var(--amber)';
+  el.innerHTML=`
+    <div class="cell"><div class="k">Trend HTF (${htf.interval.toUpperCase()})</div><div class="v ${htf.direction==='BUY'?'tp':htf.direction==='SELL'?'sl':''}">${htf.direction}</div></div>
+    <div class="cell"><div class="k">ADX HTF</div><div class="v" style="font-size:15px;">${htf.adx.toFixed(1)}</div></div>
+    <div class="cell"><div class="k">Status Konfluensi</div><div class="v" style="font-size:12.5px; color:${statusColor};">${sig.direction==='HOLD' ? '-' : aligned ? '✓ SEARAH HTF' : '⚠ BERLAWANAN HTF'}</div></div>`;
+}
+
+/* ============ Backtest ringan (dari candle yang sama, tanpa fetch tambahan) ============ */
+function backtestStrategy(candles){
+  const closes=candles.map(c=>c.close), highs=candles.map(c=>c.high), lows=candles.map(c=>c.low);
+  const ema9=ema(closes,9), ema21=ema(closes,21), rsiArr=rsi(closes,14), atrArr=atr(highs,lows,closes,14);
+  let wins=0, losses=0, totalR=0, openTrades=0;
+  const lookahead=20;
+  for(let i=22;i<closes.length-1;i++){
+    const prevDiff=ema9[i-1]-ema21[i-1], curDiff=ema9[i]-ema21[i], curRsi=rsiArr[i];
+    let dir=null;
+    if(prevDiff<=0 && curDiff>0 && curRsi<70) dir='BUY';
+    else if(prevDiff>=0 && curDiff<0 && curRsi>30) dir='SELL';
+    if(!dir) continue;
+    const entry=closes[i], a=atrArr[i];
+    if(!a) continue;
+    const sl = dir==='BUY'? entry-1.5*a : entry+1.5*a;
+    const tp1 = dir==='BUY'? entry+1.5*a : entry-1.5*a;
+    let outcome=null;
+    const end=Math.min(closes.length-1, i+lookahead);
+    for(let j=i+1;j<=end;j++){
+      if(dir==='BUY'){
+        if(lows[j]<=sl){ outcome='LOSS'; break; }
+        if(highs[j]>=tp1){ outcome='WIN'; break; }
+      } else {
+        if(highs[j]>=sl){ outcome='LOSS'; break; }
+        if(lows[j]<=tp1){ outcome='WIN'; break; }
+      }
+    }
+    if(outcome==='WIN'){ wins++; totalR+=1; } else if(outcome==='LOSS'){ losses++; totalR-=1; } else openTrades++;
+  }
+  const closedTrades=wins+losses;
+  return { wins, losses, closedTrades, openTrades, winRate: closedTrades? (wins/closedTrades*100):null, avgR: closedTrades? (totalR/closedTrades):null };
+}
+function renderBacktest(bt){
+  const el=document.getElementById('backtestArea');
+  if(!bt.closedTrades){ el.innerHTML='<div class="empty">Belum cukup sinyal historis untuk backtest di 100 bar ini.</div>'; return; }
+  el.innerHTML=`
+    <div class="cell"><div class="k">Sinyal Diuji</div><div class="v">${bt.closedTrades+bt.openTrades}</div></div>
+    <div class="cell"><div class="k">Win Rate</div><div class="v ${bt.winRate>=50?'tp':'sl'}">${bt.winRate.toFixed(0)}%</div></div>
+    <div class="cell"><div class="k">Menang / Kalah</div><div class="v">${bt.wins}W / ${bt.losses}L</div></div>
+    <div class="cell"><div class="k">Avg R (closed)</div><div class="v ${bt.avgR>=0?'tp':'sl'}">${bt.avgR>=0?'+':''}${bt.avgR.toFixed(2)}R</div></div>`;
+}
+
+/* ============ Alert: beep + browser notification saat sinyal baru ============ */
+let alertsEnabled=false;
+let lastAlertKey=null;
+document.getElementById('alertBtn').addEventListener('click', async ()=>{
+  const btn=document.getElementById('alertBtn');
+  if(!('Notification' in window)){ btn.textContent='🔕 Tidak Didukung'; return; }
+  const perm=await Notification.requestPermission();
+  alertsEnabled = perm==='granted';
+  btn.textContent = alertsEnabled ? '🔔 Alert Aktif' : '🔕 Alert Ditolak';
+});
+function beep(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    o.start(); o.stop(ctx.currentTime+0.18);
+  }catch(e){}
+}
+function maybeAlert(sig){
+  if(sig.direction==='HOLD') return;
+  const key=`${sig.symbol}|${sig.direction}|${sig.entry}`;
+  if(key===lastAlertKey) return;
+  lastAlertKey=key;
+  beep();
+  if(alertsEnabled && document.hidden){
+    new Notification(`${sig.symbol} — SINYAL ${sig.direction}`, { body:`Entry ${sig.entry} · SL ${sig.sl} · Confidence ${sig.confidence}` });
+  }
+}
+
+/* ============ Risk Guard & Jurnal harian (localStorage, reset per hari) ============ */
+const RISK_KEY='dtRiskJournal';
+function todayLocal(){ return new Date().toISOString().slice(0,10); }
+function loadRiskState(){
+  let s; try{ s=JSON.parse(localStorage.getItem(RISK_KEY)); }catch(e){ s=null; }
+  if(!s || s.date!==todayLocal()) s={ date:todayLocal(), trades:[] };
+  return s;
+}
+function saveRiskState(s){ try{ localStorage.setItem(RISK_KEY, JSON.stringify(s)); }catch(e){} }
+let riskState=loadRiskState();
+function renderRisk(){
+  const maxLossR=+document.getElementById('maxLossR').value || 3;
+  const totalR=riskState.trades.reduce((a,b)=>a+b,0);
+  document.getElementById('riskArea').innerHTML=`
+    <div class="cell"><div class="k">Total R Hari Ini</div><div class="v ${totalR>=0?'tp':'sl'}">${totalR>=0?'+':''}${totalR.toFixed(1)}R</div></div>
+    <div class="cell"><div class="k">Jumlah Trade</div><div class="v">${riskState.trades.length}</div></div>
+    <div class="cell"><div class="k">Sisa Budget Rugi</div><div class="v">${Math.max(0,maxLossR+totalR).toFixed(1)}R</div></div>`;
+  const warn=document.getElementById('riskWarning');
+  warn.innerHTML = totalR<=-maxLossR
+    ? '<div class="risk-banner" style="margin-top:12px;">🛑 BATAS RUGI HARIAN TERCAPAI. Disiplin: berhenti trading untuk hari ini.</div>'
+    : '';
+}
+document.querySelectorAll('[data-log]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    riskState.trades.push(+btn.dataset.log);
+    saveRiskState(riskState);
+    renderRisk();
+  });
+});
+document.getElementById('resetJournalBtn').addEventListener('click', ()=>{
+  riskState={ date:todayLocal(), trades:[] };
+  saveRiskState(riskState);
+  renderRisk();
+});
+document.getElementById('maxLossR').addEventListener('input', renderRisk);
+renderRisk();
+
 /* ============ Main scan ============ */
 let isScanning=false;
 async function scan(){
@@ -1004,12 +1183,21 @@ async function scan(){
     const candles=await fetchCandles(symbol, interval);
     const sig=buildSignal(candles, symbol);
     const trendAdx=adxValue(candles.map(c=>c.high), candles.map(c=>c.low), candles.map(c=>c.close));
+    try{
+      const htfBias=await fetchHTFBias(symbol, interval);
+      applyMTF(sig, htfBias);
+      renderMTF(htfBias, sig);
+    }catch(mtfErr){
+      document.getElementById('mtfArea').innerHTML='<div class="empty">Gagal memuat data HTF untuk konfirmasi.</div>';
+    }
+    renderBacktest(backtestStrategy(candles));
     const lot=estimateLot(balance, riskPct, sig.entry, sig.sl, symbol);
     lastSignal={...sig, lot};
     lastCandles=candles;
     renderSignal(sig, lot);
     pushHistory(sig);
     drawChart(candles, symbol, sig);
+    maybeAlert(sig);
 
     document.getElementById('pivotArea').innerHTML=`
       <div class="cell"><div class="k">Trend (ADX14)</div><div class="v" style="font-size:15px;">${trendAdx.toFixed(1)}</div><div class="meta" style="margin-top:2px;">${trendLabel(trendAdx)}</div></div>`;
