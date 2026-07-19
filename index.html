@@ -28,6 +28,15 @@ body{
   overflow-x:hidden;
   position:relative;
 }
+/* overlay scanline ambient -- 1 elemen tetap (bukan spawn berulang), animasi cuma
+   transform (GPU compositor), biaya CPU/RAM konstan walau dipajang berjam-jam */
+body::before{
+  content:''; position:fixed; inset:0; z-index:2; pointer-events:none;
+  background:repeating-linear-gradient(0deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 1px, transparent 1px, transparent 3px);
+  animation:scanShift 5s linear infinite;
+  will-change:transform;
+}
+@keyframes scanShift{ from{transform:translateY(0);} to{transform:translateY(3px);} }
 .wrap{position:relative; z-index:1; max-width:920px; margin:0 auto; padding:24px 16px 60px;}
 body{padding-bottom:34px;}
 
@@ -51,12 +60,18 @@ h1{
   border:1px solid var(--red); background:rgba(255,46,99,.06); color:#ffb3c3;
   font-size:11.5px; padding:10px 12px; border-radius:4px; margin:16px 0 20px; line-height:1.5;
 }
+/* dipakai khusus utk banner limit-rugi-harian (bukan disclaimer statis) -- animasi
+   otomatis berhenti begitu banner di-unmount (limit sudah tidak tercapai) */
+.risk-banner.pulse-warn{ animation:warnPulse 1.8s ease-in-out infinite; }
+@keyframes warnPulse{ 0%,100%{box-shadow:0 0 0 rgba(255,46,99,0);} 50%{box-shadow:0 0 16px rgba(255,46,99,.45);} }
 
 /* panel */
 .panel{
   background:var(--panel); border:1px solid var(--border); border-radius:6px;
   padding:18px; margin-bottom:18px;
+  animation:panelIn .45s ease-out both; /* sekali saat render, bukan loop -- nol biaya setelah selesai */
 }
+@keyframes panelIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
 .panel h2{
   font-family:'Orbitron',sans-serif; font-size:13px; color:var(--primary); letter-spacing:1.5px;
   margin-bottom:14px; text-transform:uppercase;
@@ -87,21 +102,37 @@ button.ghost{
 /* signal card */
 .badge{
   display:inline-block; font-family:'Orbitron',sans-serif; font-weight:900; font-size:22px;
-  padding:8px 18px; border-radius:4px; letter-spacing:2px;
+  padding:8px 18px; border-radius:4px; letter-spacing:2px; position:relative;
 }
 .badge.buy{background:rgba(255,255,255,.12); color:var(--primary); border:1px solid var(--primary); text-shadow:0 0 10px rgba(255,255,255,.6);}
 .badge.sell{background:rgba(255,46,99,.12); color:var(--red); border:1px solid var(--red); text-shadow:0 0 10px rgba(255,46,99,.6);}
 .badge.hold{background:rgba(255,206,69,.1); color:var(--amber); border:1px solid var(--amber);}
+/* halo pulse: cuma 1 pseudo-element kecil, transform+opacity only (GPU compositor),
+   biaya konstan walau dipajang berjam-jam -- tidak ada JS timer/DOM baru */
+.badge.buy::after, .badge.sell::after{
+  content:''; position:absolute; inset:-3px; border-radius:6px; border:1px solid currentColor;
+  color:inherit; opacity:0; animation:badgePulse 2.4s ease-out infinite; pointer-events:none;
+}
+@keyframes badgePulse{ 0%{transform:scale(1); opacity:.5;} 70%{transform:scale(1.14); opacity:0;} 100%{opacity:0;} }
 
 .meta{font-size:11px; color:var(--muted); margin-top:6px;}
 .data-grid{
   display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-top:16px;
 }
-.cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px;}
+.cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px; transition:border-color .3s;}
 .cell .k{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
 .cell .v{font-size:16px; font-weight:700; margin-top:3px; overflow-wrap:break-word; word-break:break-word;}
 .cell .v.sl{color:var(--red);}
 .cell .v.tp{color:var(--primary);}
+
+/* flash sekali saat data refresh -- one-shot animation (bukan infinite), di-trigger via JS
+   dgn toggle class, otomatis berhenti sendiri (animation-fill-mode default), nol biaya saat idle */
+.flash-update{ animation:flashUpdate .7s ease-out; }
+@keyframes flashUpdate{ 0%{background:rgba(255,255,255,.16);} 100%{background:transparent;} }
+
+/* live indicator dot */
+.live-dot{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--primary); margin-right:5px; vertical-align:middle; animation:liveDot 1.5s ease-in-out infinite;}
+@keyframes liveDot{ 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.35; transform:scale(.65);} }
 
 .empty{color:var(--muted); font-size:12.5px; padding:10px 0;}
 .error{color:var(--red); font-size:12px; margin-top:10px;}
@@ -112,12 +143,15 @@ table th, table td{white-space:nowrap;}
 th,td{padding:7px 8px; text-align:left; border-bottom:1px solid var(--border);}
 th{color:var(--muted); font-weight:500; text-transform:uppercase; font-size:10px;}
 td.buy{color:var(--primary);} td.sell{color:var(--red);}
+tbody tr{animation:rowIn .3s ease-out;}
+@keyframes rowIn{ from{opacity:0;} to{opacity:1;} }
 
 footer{text-align:center; font-size:10.5px; color:var(--muted); margin-top:26px; line-height:1.7; padding-bottom:34px;}
 footer a{color:var(--primary);}
 
-.sess-cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px; text-align:center;}
-.sess-cell.active{border-color:var(--primary); box-shadow:0 0 10px rgba(255,255,255,.25);}
+.sess-cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px; text-align:center; transition:border-color .4s, box-shadow .4s;}
+.sess-cell.active{border-color:var(--primary); box-shadow:0 0 10px rgba(255,255,255,.25); animation:sessGlow 3s ease-in-out infinite;}
+@keyframes sessGlow{ 0%,100%{box-shadow:0 0 8px rgba(255,255,255,.18);} 50%{box-shadow:0 0 14px rgba(255,255,255,.32);} }
 .sess-cell .k{font-size:10px; color:var(--muted); text-transform:uppercase;}
 .sess-cell .v{font-size:13px; font-weight:700; margin-top:4px;}
 .sess-cell.active .v{color:var(--primary);}
@@ -129,6 +163,10 @@ footer a{color:var(--primary);}
 .chart-legend span{display:inline-flex; align-items:center; gap:5px;}
 .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
 #priceChart{width:100%; height:340px; display:block; border-radius:4px; background:var(--panel2);}
+/* fade tiap redraw chart -- one-shot per trigger via class toggle di JS, bukan loop rAF */
+.chart-wrap.redraw-fx canvas{ animation:chartFade .4s ease-out; }
+@keyframes chartFade{ from{opacity:.35;} to{opacity:1;} }
+
 
 /* news */
 .news-item{border-bottom:1px solid var(--border); padding:10px 0; font-size:12px; line-height:1.5;}
@@ -698,6 +736,8 @@ function buildSignal(candles, symbol){
 /* ============ Chart rendering ============ */
 function drawChart(candles, symbol, sig){
   const canvas=document.getElementById('priceChart');
+  const chartWrapEl=document.querySelector('.chart-wrap');
+  if(chartWrapEl){ chartWrapEl.classList.remove('redraw-fx'); void chartWrapEl.offsetWidth; chartWrapEl.classList.add('redraw-fx'); }
   const dpr=window.devicePixelRatio||1;
   const cssW=canvas.clientWidth, cssH=canvas.clientHeight||280;
   canvas.width=cssW*dpr; canvas.height=cssH*dpr;
@@ -752,16 +792,19 @@ function drawChart(candles, symbol, sig){
     ctx.fill();
   }
 
-  // candles
+  // candles (candle terakhir dikasih glow tipis biar kelihatan "hidup" tanpa animasi loop)
   const cw=Math.max(2, plotW/view.length*0.6);
   view.forEach((c,i)=>{
     const cx=x(i);
     const up=c.close>=c.open;
+    const isLast=i===view.length-1;
     ctx.strokeStyle=ctx.fillStyle= up?'#f2f2f2':'#ff2e63';
     ctx.lineWidth=1;
+    if(isLast){ ctx.shadowColor=up?'rgba(255,255,255,.55)':'rgba(255,46,99,.55)'; ctx.shadowBlur=8; }
     ctx.beginPath(); ctx.moveTo(cx,y(c.high)); ctx.lineTo(cx,y(c.low)); ctx.stroke();
     const oy=y(c.open), cy=y(c.close);
     ctx.fillRect(cx-cw/2, Math.min(oy,cy), cw, Math.max(1,Math.abs(cy-oy)));
+    if(isLast) ctx.shadowBlur=0;
   });
 
   // garis harga terakhir + label axis kanan (khas TradingView)
@@ -778,14 +821,17 @@ function drawChart(candles, symbol, sig){
     ctx.fillText(lastC.close.toFixed(decimalsFor(symbol)), cssW-pad.r+4, ly+3);
   }
 
-  // EMA lines
-  function drawLine(arr, color){
-    ctx.strokeStyle=color; ctx.lineWidth=1.6; ctx.beginPath();
+  // EMA lines (glow tipis, statis per-draw -- bukan animasi berjalan)
+  function drawLine(arr, color, glow){
+    ctx.strokeStyle=color; ctx.lineWidth=1.6;
+    if(glow){ ctx.shadowColor=color; ctx.shadowBlur=4; }
+    ctx.beginPath();
     arr.forEach((v,i)=>{ const px=x(i), py=y(v); i===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
     ctx.stroke();
+    ctx.shadowBlur=0;
   }
-  drawLine(ema9v, '#f2f2f2');
-  drawLine(ema21v, '#ffce45');
+  drawLine(ema9v, '#f2f2f2', true);
+  drawLine(ema21v, '#ffce45', true);
 
   // SL/TP/Entry lines
   function levelLine(price, color, label){
@@ -843,6 +889,7 @@ function renderSignal(sig, lot){
       <div class="meta">${sig.symbol} · ${sig.time}</div>
       <div class="empty">${sig.reasons.join(' · ')}</div>`;
     document.getElementById('copyBtn').disabled=true;
+    flashEl(area);
     return;
   }
   area.innerHTML=`
@@ -865,6 +912,7 @@ function renderSignal(sig, lot){
     </div>
     <div class="meta" style="margin-top:8px;">${sig.reasons.join(' · ')}</div>`;
   document.getElementById('copyBtn').disabled=false;
+  flashEl(area);
 }
 
 function pushHistory(sig){
@@ -985,8 +1033,15 @@ function renderFreshBadge(elId, meta){
   const el=document.getElementById(elId);
   if(!el) return;
   if(!meta){ el.textContent='-'; el.className='fresh-badge'; return; }
-  if(!meta.cached){ el.textContent='LIVE'; el.className='fresh-badge live'; }
+  if(!meta.cached){ el.innerHTML='<span class="live-dot"></span>LIVE'; el.className='fresh-badge live'; }
   else{ el.textContent=`cache ${Math.round(meta.ageMs/1000)}d`; el.className='fresh-badge'; }
+}
+/* trigger ulang animasi flash-update (one-shot) tanpa nunggu reflow manual berulang kali */
+function flashEl(el){
+  if(!el) return;
+  el.classList.remove('flash-update');
+  void el.offsetWidth;
+  el.classList.add('flash-update');
 }
 function renderQuote(q, symbol){
   const dec=decimalsFor(symbol);
@@ -1001,6 +1056,7 @@ function renderQuote(q, symbol){
     <div class="cell"><div class="k">Perubahan</div><div class="v ${chg>=0?'tp':'sl'}">${chg>=0?'+':''}${chg.toFixed(dec)}</div></div>
     <div class="cell"><div class="k">Perubahan %</div><div class="v ${chgPct>=0?'tp':'sl'}">${chgPct>=0?'+':''}${chgPct.toFixed(2)}%</div></div>
     <div class="cell"><div class="k">Update</div><div class="v" style="font-size:11px;">${q.datetime||'-'}</div></div>`;
+  flashEl(document.getElementById('quoteArea'));
 }
 
 /* ============ Fundamental saham (mikro, khusus simbol saham/index) ============ */
@@ -1147,7 +1203,7 @@ function renderRisk(){
     <div class="cell"><div class="k">Sisa Budget Rugi</div><div class="v">${Math.max(0,maxLossR+totalR).toFixed(1)}R</div></div>`;
   const warn=document.getElementById('riskWarning');
   warn.innerHTML = totalR<=-maxLossR
-    ? '<div class="risk-banner" style="margin-top:12px;">🛑 BATAS RUGI HARIAN TERCAPAI. Disiplin: berhenti trading untuk hari ini.</div>'
+    ? '<div class="risk-banner pulse-warn" style="margin-top:12px;">🛑 BATAS RUGI HARIAN TERCAPAI. Disiplin: berhenti trading untuk hari ini.</div>'
     : '';
 }
 document.querySelectorAll('[data-log]').forEach(btn=>{
