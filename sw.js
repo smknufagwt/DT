@@ -47,6 +47,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Cross-origin (mis. Binance klines/WS untuk panel korelasi): biarkan lewat
+  // apa adanya, jangan disimpan di cache SW ini -- data realtime harus selalu segar.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   // App shell & aset statis: cache-first, lalu update cache di background
   // (stale-while-revalidate) supaya perubahan file ikut ke-refresh sendiri.
   if (event.request.method === 'GET') {

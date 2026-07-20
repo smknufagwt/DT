@@ -224,6 +224,22 @@ footer a{color:var(--primary);}
 .chart-toolbar button:not(.active){background:transparent; border:1px solid var(--border); color:var(--muted);}
 .crosshair-box{position:absolute; background:#0a0a0a; border:1px solid var(--primary); border-radius:4px; padding:6px 9px; font-size:10.5px; line-height:1.5; pointer-events:none; z-index:2; white-space:nowrap; display:none;}
 .chart-wrap{position:relative;}
+
+/* signal berganti arah -> pulse kuat sesaat, otomatis berhenti (iteration-count terbatas) */
+.badge.dir-pulse{animation:dirPulse 1.4s ease-out 2;}
+@keyframes dirPulse{
+  0%{box-shadow:0 0 0 rgba(255,255,255,0);}
+  30%{box-shadow:0 0 18px rgba(255,255,255,.6);}
+  100%{box-shadow:0 0 0 rgba(255,255,255,0);}
+}
+
+/* desktop: kolom utama (chart/sinyal) + side rail (sesi/korelasi/news/kalender) */
+@media(min-width:1000px){
+  .wrap{max-width:1400px; display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:20px; align-items:start; padding:24px 24px 60px;}
+  .wrap>header, .wrap>.risk-banner, .wrap>footer{grid-column:1/-1;}
+  .wrap>.panel{grid-column:1;}
+  .wrap>.panel.side{grid-column:2;}
+}
 </style>
 </head>
 <body>
@@ -241,7 +257,7 @@ footer a{color:var(--primary);}
     Trading forex & logam mengandung risiko kehilangan modal. Uji di akun demo sebelum live, dan gunakan money management yang wajar.
   </div>
 
-  <section class="panel">
+  <section class="panel side">
     <h2 style="display:inline-block;">// Smart Money / COT Positioning</h2><span class="fresh-badge" id="cotFresh">-</span>
     <div class="sm-row" id="cotArea"><div class="empty">Data CFTC (Commitment of Traders) dimuat saat scan sinyal.</div></div>
     <div class="meta" style="margin-top:8px;">Sumber: CFTC Legacy Futures Only (mingguan, rilis tiap Jumat). Non-Commercial = large speculators/funds (sering disebut "smart money" di analisis retail); net posisi & perubahan mingguan jadi konfirmasi arah tren institusional, bukan sinyal entry langsung.</div>
@@ -370,9 +386,15 @@ footer a{color:var(--primary);}
     </div>
   </section>
 
-  <section class="panel">
+  <section class="panel side">
     <h2>// Sesi Pasar</h2>
     <div class="grid" id="sessionArea"></div>
+  </section>
+
+  <section class="panel side" id="corrPanel">
+    <h2 style="display:inline-block;">// Korelasi &amp; Sentimen Risiko</h2><span class="fresh-badge" id="corrFresh">-</span>
+    <div class="sm-row" id="corrArea"><div class="empty">Menyambungkan live feed BTC/USDT...</div></div>
+    <div class="meta" style="margin-top:8px;">BTC/USDT jadi proxy sentimen risk-on/off (live via WebSocket Binance, gratis tanpa key). Korelasi dihitung dari return candle-close vs simbol aktif — gambaran kasar, bukan data institusional resmi (DXY).</div>
   </section>
 
   <section class="panel">
@@ -404,12 +426,12 @@ footer a{color:var(--primary);}
     <div class="empty" id="historyEmpty">Riwayat kosong.</div>
   </section>
 
-  <section class="panel">
+  <section class="panel side">
     <h2>// Fed & Liquidity Watch</h2>
     <div id="newsArea"><div class="empty">Masukkan Finnhub API key untuk memuat berita Fed & likuiditas pasar.</div></div>
   </section>
 
-  <section class="panel">
+  <section class="panel side">
     <h2>// Kalender Ekonomi (Fundamental Makro)</h2>
     <div class="tradingview-widget-container">
       <div class="tradingview-widget-container__widget"></div>
@@ -878,14 +900,17 @@ function estimateLot(balance, riskPct, entry, sl, symbol){
 /* ============ Rendering ============ */
 let lastSignal=null;
 let lastCandles=null;
+let lastDirection=null;
 const history=[];
 
 function renderSignal(sig, lot){
   const cls=sig.direction==='BUY'?'buy':sig.direction==='SELL'?'sell':'hold';
+  const dirChanged = lastDirection!==null && sig.direction!==lastDirection; // baru "berganti", bukan render pertama kali
+  lastDirection = sig.direction;
   const area=document.getElementById('signalArea');
   if(sig.direction==='HOLD'){
     area.innerHTML=`
-      <span class="badge hold">HOLD</span>
+      <span class="badge hold ${dirChanged?'dir-pulse':''}">HOLD</span>
       <div class="meta">${sig.symbol} · ${sig.time}</div>
       <div class="empty">${sig.reasons.join(' · ')}</div>`;
     document.getElementById('copyBtn').disabled=true;
@@ -893,7 +918,7 @@ function renderSignal(sig, lot){
     return;
   }
   area.innerHTML=`
-    <span class="badge ${cls}">${sig.direction}</span>
+    <span class="badge ${cls} ${dirChanged?'dir-pulse':''}">${sig.direction}</span>
     <div class="meta">${sig.symbol} · ${sig.time} · Confidence: ${sig.confidence}</div>
     <div class="data-grid">
       <div class="cell"><div class="k">Entry</div><div class="v">${sig.entry}</div></div>
@@ -1194,17 +1219,21 @@ function loadRiskState(){
 }
 function saveRiskState(s){ try{ localStorage.setItem(RISK_KEY, JSON.stringify(s)); }catch(e){} }
 let riskState=loadRiskState();
+let riskLocked=false;
 function renderRisk(){
   const maxLossR=+document.getElementById('maxLossR').value || 3;
   const totalR=riskState.trades.reduce((a,b)=>a+b,0);
+  riskLocked = totalR<=-maxLossR;
   document.getElementById('riskArea').innerHTML=`
     <div class="cell"><div class="k">Total R Hari Ini</div><div class="v ${totalR>=0?'tp':'sl'}">${totalR>=0?'+':''}${totalR.toFixed(1)}R</div></div>
     <div class="cell"><div class="k">Jumlah Trade</div><div class="v">${riskState.trades.length}</div></div>
     <div class="cell"><div class="k">Sisa Budget Rugi</div><div class="v">${Math.max(0,maxLossR+totalR).toFixed(1)}R</div></div>`;
   const warn=document.getElementById('riskWarning');
-  warn.innerHTML = totalR<=-maxLossR
-    ? '<div class="risk-banner pulse-warn" style="margin-top:12px;">🛑 BATAS RUGI HARIAN TERCAPAI. Disiplin: berhenti trading untuk hari ini.</div>'
+  warn.innerHTML = riskLocked
+    ? '<div class="risk-banner pulse-warn" style="margin-top:12px;">🛑 BATAS RUGI HARIAN TERCAPAI. Scan sinyal dikunci otomatis — disiplin dulu, lanjut lagi besok (atau "Reset Hari Ini" kalau ini salah input).</div>'
     : '';
+  const scanBtn=document.getElementById('scanBtn');
+  if(scanBtn) scanBtn.disabled=riskLocked;
 }
 document.querySelectorAll('[data-log]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -1225,6 +1254,7 @@ renderRisk();
 let isScanning=false;
 async function scan(){
   if(isScanning) return; // cegah scan tumpang tindih (misal ganti pair pas auto-scan lagi jalan) -> hemat kuota API
+  if(riskLocked){ document.getElementById('errBox').textContent='Batas rugi harian tercapai — kunci otomatis aktif.'; return; }
   isScanning=true;
   const symbol=document.getElementById('symbol').value;
   const interval=document.getElementById('interval').value;
@@ -1254,6 +1284,7 @@ async function scan(){
     pushHistory(sig);
     drawChart(candles, symbol, sig);
     maybeAlert(sig);
+    updateCorrelation(symbol, interval, candles);
 
     document.getElementById('pivotArea').innerHTML=`
       <div class="cell"><div class="k">Trend (ADX14)</div><div class="v" style="font-size:15px;">${trendAdx.toFixed(1)}</div><div class="meta" style="margin-top:2px;">${trendLabel(trendAdx)}</div></div>`;
@@ -1272,7 +1303,7 @@ async function scan(){
   }catch(e){
     errBox.textContent=e.message;
   }finally{
-    btn.disabled=false; btn.textContent='Scan Sinyal';
+    btn.disabled=riskLocked; btn.textContent='Scan Sinyal';
   }
 
   try{
@@ -1535,6 +1566,81 @@ setInterval(async ()=>{ const c=await pingPresence(); setVisitorStatus(c); }, 20
 
 // refresh langsung begitu halaman dibuka / link diklik, lalu mulai loop auto-scan
 pingPresence().then(c=>{ setVisitorStatus(c); scan(); visitorAutoLoop(); });
+
+/* ============ Korelasi & Sentimen Risiko (BTC/USDT via Binance — gratis, no key) ============
+   BTC dipakai proxy sentimen risk-on/off ritel. Live price lewat WebSocket publik Binance
+   (bukti realtime, tidak lewat proxy Vercel karena serverless tidak bisa nahan koneksi
+   persisten). Korelasi dihitung dari return candle-close BTC vs simbol aktif, tail-aligned
+   per jumlah bar (bukan timestamp presisi) -- gambaran kasar, bukan pengganti DXY resmi. */
+const BINANCE_INTERVAL={'1min':'1m','5min':'5m','15min':'15m','1h':'1h','4h':'4h','1day':'1d'};
+let btcLastPrice=null, btcPrevPrice=null, btcTickTs=0, lastCorr=null;
+
+function pearson(a,b){
+  const n=Math.min(a.length,b.length);
+  if(n<8) return null;
+  a=a.slice(-n); b=b.slice(-n);
+  const ma=a.reduce((x,y)=>x+y,0)/n, mb=b.reduce((x,y)=>x+y,0)/n;
+  let num=0, da=0, db=0;
+  for(let i=0;i<n;i++){ const xa=a[i]-ma, xb=b[i]-mb; num+=xa*xb; da+=xa*xa; db+=xb*xb; }
+  return (da===0||db===0) ? null : num/Math.sqrt(da*db);
+}
+function toReturns(closes){
+  const r=[];
+  for(let i=1;i<closes.length;i++) r.push((closes[i]-closes[i-1])/closes[i-1]);
+  return r;
+}
+function corrLabel(r){
+  if(r==null) return { text:'Data belum cukup', cls:'' };
+  const abs=Math.abs(r);
+  if(abs<0.15) return { text:'Netral / tidak berkorelasi', cls:'' };
+  const strength=abs>=0.7?'Kuat ':abs>=0.4?'Sedang ':'Lemah ';
+  return { text:strength+(r>0?'Positif':'Negatif'), cls:r>0?'long':'short' };
+}
+async function fetchBTCKlines(interval, limit){
+  const bi=BINANCE_INTERVAL[interval] || '15m';
+  const res=await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${bi}&limit=${limit}`);
+  if(!res.ok) throw new Error('Gagal ambil data BTC (Binance).');
+  const rows=await res.json();
+  return rows.map(r=>+r[4]);
+}
+function renderCorrelation(r, symbol){
+  const lbl=corrLabel(r);
+  const btcTxt = btcLastPrice!=null ? `$${btcLastPrice.toLocaleString('en-US',{maximumFractionDigits:1})}` : '-';
+  const btcCls = (btcPrevPrice!=null && btcLastPrice!=null) ? (btcLastPrice>=btcPrevPrice?'long':'short') : '';
+  const secAgo = btcTickTs ? Math.max(0,Math.round((Date.now()-btcTickTs)/1000))+'d lalu' : 'menunggu tick...';
+  document.getElementById('corrArea').innerHTML=`
+    <div class="sm-cell"><div class="k">BTC/USDT (live)</div><div class="sm-num ${btcCls}">${btcTxt}</div><div class="sm-delta">WS Binance · ${secAgo}</div></div>
+    <div class="sm-cell"><div class="k">Korelasi vs ${symbol}</div><div class="sm-num ${lbl.cls}">${r!=null?r.toFixed(2):'-'}</div><div class="sm-delta">${lbl.text}</div></div>`;
+  const badge=document.getElementById('corrFresh');
+  badge.innerHTML = btcLastPrice!=null ? '<span class="live-dot"></span>LIVE' : '-';
+  badge.className = btcLastPrice!=null ? 'fresh-badge live' : 'fresh-badge';
+}
+async function updateCorrelation(symbol, interval, candles){
+  try{
+    const btcCloses=await fetchBTCKlines(interval, Math.min(100, Math.max(20, candles.length)));
+    lastCorr=pearson(toReturns(candles.map(c=>c.close)), toReturns(btcCloses));
+    renderCorrelation(lastCorr, symbol);
+  }catch(e){
+    document.getElementById('corrArea').innerHTML=`<div class="empty">${e.message}</div>`;
+  }
+}
+function connectBTCStream(){
+  let ws;
+  try{ ws=new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade'); }
+  catch(e){ return; }
+  ws.onmessage=(ev)=>{
+    try{
+      const price=+JSON.parse(ev.data).p;
+      if(!isFinite(price)) return;
+      btcPrevPrice=btcLastPrice; btcLastPrice=price; btcTickTs=Date.now();
+      renderCorrelation(lastCorr, document.getElementById('symbol').value);
+    }catch(e){}
+  };
+  ws.onclose=()=>{ setTimeout(connectBTCStream, 5000); }; // koneksi HP suka putus -> auto-reconnect
+  ws.onerror=()=>{ ws.close(); };
+}
+connectBTCStream();
+setInterval(()=>{ if(btcLastPrice!=null) renderCorrelation(lastCorr, document.getElementById('symbol').value); }, 5000);
 </script>
 </body>
 </html>
