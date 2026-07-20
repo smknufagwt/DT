@@ -205,6 +205,17 @@ footer a{color:var(--primary);}
 .ticker-move span.fed-hl{color:var(--amber);}
 .ticker-track:hover .ticker-move, .ticker-track.paused .ticker-move{animation-play-state:paused;}
 @keyframes ticker{ from{transform:translateX(0);} to{transform:translateX(-100%);} }
+.ticker-clock{
+  flex:0 0 auto; padding:0 12px; height:100%; display:flex; align-items:center; gap:6px;
+  font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--primary);
+  border-left:1px solid rgba(255,255,255,.15); white-space:nowrap;
+}
+.ticker-clock .tz{color:var(--muted); font-size:9.5px;}
+@media(max-width:380px){
+  .ticker-clock .tz{display:none;}
+  .ticker-clock{padding:0 8px; font-size:11px;}
+  .ticker-label{padding:0 8px; font-size:9.5px;}
+}
 
 /* smart money / COT panel */
 .sm-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;}
@@ -472,6 +483,7 @@ footer a{color:var(--primary);}
 <div class="ticker-bar">
   <div class="ticker-label">LIVE NEWS</div>
   <div class="ticker-track"><div class="ticker-move" id="tickerMove"><span>Menunggu API key Finnhub untuk memuat live news...</span></div></div>
+  <div class="ticker-clock" id="tickerClock">--:--:-- <span class="tz">WIB (UTC+7)</span></div>
 </div>
 
 <script>
@@ -1554,12 +1566,8 @@ async function pingPresence(){
 }
 
 async function visitorAutoLoop(){
-  const count=await pingPresence();
-  if(count<1){ setVisitorStatus(0,'berhenti (0 pengunjung)'); clearTimeout(visitorAutoTimer); return; }
-  setVisitorStatus(count);
   await scan();
   visitorAutoCount++;
-  setVisitorStatus(count);
   visitorAutoTimer=setTimeout(visitorAutoLoop, currentAutoscanMs());
 }
 // ganti timeframe -> auto-scan langsung ikut interval baru (tanpa nunggu siklus lama habis)
@@ -1568,8 +1576,23 @@ document.getElementById('interval').addEventListener('change', ()=>{
   visitorAutoTimer=setTimeout(visitorAutoLoop, currentAutoscanMs());
 });
 
-// heartbeat ringan tiap 20 detik biar tetap terhitung "aktif" walau belum auto-scan lagi
-setInterval(async ()=>{ const c=await pingPresence(); setVisitorStatus(c); }, 20*1000);
+// heartbeat presence independen -- lepas total dari siklus scan/ganti pair/timeframe,
+// jadi jumlah pengunjung tetap update walau simbol/timeframe belum berubah
+setInterval(async ()=>{
+  const c=await pingPresence();
+  setVisitorStatus(c, c<1 ? 'sinkron terputus, mencoba lagi...' : undefined);
+}, 5*1000);
+
+// jam WIB (UTC+7), bersanding dengan live news -- independen, tick tiap detik
+function updateWIBClock(){
+  const now=new Date();
+  const h=(now.getUTCHours()+7)%24, m=now.getUTCMinutes(), s=now.getUTCSeconds();
+  const pad=n=>String(n).padStart(2,'0');
+  const el=document.getElementById('tickerClock');
+  if(el) el.innerHTML=`${pad(h)}:${pad(m)}:${pad(s)} <span class="tz">WIB (UTC+7)</span>`;
+}
+setInterval(updateWIBClock, 1000);
+updateWIBClock();
 
 // refresh langsung begitu halaman dibuka / link diklik, lalu mulai loop auto-scan
 pingPresence().then(c=>{ setVisitorStatus(c); scan(); visitorAutoLoop(); });
