@@ -3,7 +3,7 @@
 // dipakai sebagai fallback offline). Kuota API dihemat di sisi server
 // (lihat api/proxy.js), bukan lewat SW ini.
 
-const SHELL_CACHE = 'dt-shell-v1';
+const SHELL_CACHE = 'dt-shell-v2';
 const API_FALLBACK_CACHE = 'dt-api-fallback-v1';
 const SHELL_ASSETS = ['/', '/index.html'];
 
@@ -53,22 +53,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell & aset statis: cache-first, lalu update cache di background
-  // (stale-while-revalidate) supaya perubahan file ikut ke-refresh sendiri.
+  // App shell & aset statis: network-first. Selalu coba ambil versi terbaru dari
+  // server dulu (must-revalidate, lihat header di vercel.json) supaya deploy/push
+  // commit baru langsung kepakai tanpa nunggu buka-tutup app. Cache cuma dipakai
+  // sebagai fallback kalau offline.
   if (event.request.method === 'GET') {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        const fetchPromise = fetch(event.request)
-          .then((res) => {
-            if (res && res.status === 200) {
-              const clone = res.clone();
-              caches.open(SHELL_CACHE).then((cache) => cache.put(event.request, clone));
-            }
-            return res;
-          })
-          .catch(() => cached);
-        return cached || fetchPromise;
-      })
+      fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(event.request))
     );
   }
 });

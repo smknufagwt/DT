@@ -74,10 +74,19 @@ h1{
 /* panel */
 .panel{
   background:var(--panel); border:1px solid var(--border); border-radius:6px;
-  padding:18px; margin-bottom:18px;
+  padding:18px; margin-bottom:18px; position:relative; overflow:hidden;
   animation:panelIn .45s ease-out both; /* sekali saat render, bukan loop -- nol biaya setelah selesai */
 }
 @keyframes panelIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+/* aksen "scan" bergerak di tepi atas tiap panel -- 1 pseudo-element per panel,
+   cuma transform (GPU compositor), biaya konstan sama seperti animasi lain di file ini */
+.panel::before{
+  content:''; position:absolute; top:0; left:-45%; width:45%; height:2px;
+  background:linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity:.6; pointer-events:none; animation:panelScan 5s linear infinite;
+}
+@keyframes panelScan{ from{transform:translateX(0);} to{transform:translateX(320%);} }
+@media (prefers-reduced-motion:reduce){ .panel::before{animation:none; display:none;} }
 .panel h2{
   font-family:'Orbitron',sans-serif; font-size:13px; color:var(--primary); letter-spacing:1.5px;
   margin-bottom:14px; text-transform:uppercase;
@@ -217,6 +226,25 @@ footer a{color:var(--primary);}
   .ticker-label{padding:0 8px; font-size:9.5px;}
 }
 
+/* mini ticker: dashboard harga pair lain real-time di panel Konfigurasi (reuse quote endpoint) */
+.mini-ticker-bar{
+  display:flex; align-items:center; height:30px; margin-top:12px;
+  background:var(--panel2); border:1px solid var(--border); border-radius:4px; overflow:hidden;
+}
+.mini-ticker-label{
+  flex:0 0 auto; background:var(--primary); color:#000000; font-family:'Orbitron',sans-serif;
+  font-weight:800; font-size:9.5px; letter-spacing:1px; padding:0 10px; height:100%;
+  display:flex; align-items:center; gap:5px;
+}
+.mini-ticker-label .live-dot{background:#000000;}
+.mini-ticker-track{flex:1; overflow:hidden; white-space:nowrap; position:relative; height:100%; display:flex; align-items:center;}
+.mini-ticker-move{display:inline-block; white-space:nowrap; animation:ticker var(--mini-ticker-duration,45s) linear infinite; padding-left:100%;}
+.mini-ticker-move span{margin-right:24px; font-size:11px;}
+.mini-ticker-move span b{color:var(--text); margin-right:5px;}
+.mini-ticker-move span.up{color:var(--primary);}
+.mini-ticker-move span.down{color:var(--red);}
+.mini-ticker-track:hover .mini-ticker-move{animation-play-state:paused;}
+
 /* smart money / COT panel */
 .sm-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;}
 .sm-cell{flex:1; min-width:150px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px;}
@@ -335,17 +363,13 @@ footer a{color:var(--primary);}
     </div>
     <div class="grid" style="margin-top:12px;">
       <div>
-        <label>Saldo Akun ($)</label>
-        <input id="balance" type="number" value="1000" min="0">
-      </div>
-      <div>
-        <label>Risiko per Trade (%)</label>
-        <input id="riskPct" type="number" value="1" min="0.1" step="0.1">
-      </div>
-      <div>
         <label>Finnhub Key (fallback)</label>
         <input id="newskey" type="password" placeholder="Kosongkan jika sudah di-set via secret">
       </div>
+    </div>
+    <div class="mini-ticker-bar">
+      <div class="mini-ticker-label"><span class="live-dot"></span>PAIR</div>
+      <div class="mini-ticker-track"><div class="mini-ticker-move" id="pairTickerMove"><span>Memuat harga pair lain...</span></div></div>
     </div>
     <div class="row">
       <button id="scanBtn">Scan Sinyal</button>
@@ -358,6 +382,14 @@ footer a{color:var(--primary);}
   <section class="panel">
     <h2>// Risk Guard & Jurnal Harian</h2>
     <div class="grid">
+      <div>
+        <label>Saldo Akun ($)</label>
+        <input id="balance" type="number" value="1000" min="0">
+      </div>
+      <div>
+        <label>Risiko per Trade (%)</label>
+        <input id="riskPct" type="number" value="1" min="0.1" step="0.1">
+      </div>
       <div>
         <label>Max Rugi Harian (R)</label>
         <input id="maxLossR" type="number" value="3" min="0.5" step="0.5">
@@ -406,6 +438,21 @@ footer a{color:var(--primary);}
   <section class="panel side">
     <h2>// Sesi Pasar</h2>
     <div class="grid" id="sessionArea"></div>
+    <div class="meta" style="margin-top:14px;">// Kalender Ekonomi (Fundamental Makro)</div>
+    <div class="tradingview-widget-container">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
+      {
+      "colorTheme": "dark",
+      "isTransparent": true,
+      "width": "100%",
+      "height": "400",
+      "locale": "id",
+      "importanceFilter": "-1,0,1",
+      "currencyFilter": "USD,EUR,GBP,JPY,AUD,CAD,CHF,NZD,XAU"
+      }
+      </script>
+    </div>
   </section>
 
   <section class="panel side" id="corrPanel">
@@ -427,12 +474,6 @@ footer a{color:var(--primary);}
   </section>
 
   <section class="panel">
-    <h2>// Backtest Ringan (100 Bar Terakhir)</h2>
-    <div class="data-grid" id="backtestArea"><div class="empty">Dimuat saat scan sinyal.</div></div>
-    <div class="meta" style="margin-top:8px;">Simulasi strategi EMA9/21 crossover + RSI pada 100 bar historis simbol/timeframe yang sama, TP1 (1:1) vs SL, lookahead 20 bar. Sample kecil — bukan jaminan performa live.</div>
-  </section>
-
-  <section class="panel">
     <h2>// Riwayat Sesi</h2>
     <div class="table-scroll">
     <table id="historyTable">
@@ -446,24 +487,6 @@ footer a{color:var(--primary);}
   <section class="panel side">
     <h2>// Fed & Liquidity Watch</h2>
     <div id="newsArea"><div class="empty">Masukkan Finnhub API key untuk memuat berita Fed & likuiditas pasar.</div></div>
-  </section>
-
-  <section class="panel side">
-    <h2>// Kalender Ekonomi (Fundamental Makro)</h2>
-    <div class="tradingview-widget-container">
-      <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
-      {
-      "colorTheme": "dark",
-      "isTransparent": true,
-      "width": "100%",
-      "height": "400",
-      "locale": "id",
-      "importanceFilter": "-1,0,1",
-      "currencyFilter": "USD,EUR,GBP,JPY,AUD,CAD,CHF,NZD,XAU"
-      }
-      </script>
-    </div>
   </section>
 
   <section class="panel" id="fundamentalPanel" style="display:none;">
@@ -1103,6 +1126,25 @@ function renderQuote(q, symbol){
   flashEl(document.getElementById('quoteArea'));
 }
 
+/* ============ Mini ticker: dashboard harga pair lain (reuse fetchQuote/proxy, TTL cache
+   server sudah shared ke semua pengunjung, jadi polling 60d tetap hemat kuota) ============ */
+const PAIR_TICKER_LIST=['EUR/USD','GBP/USD','USD/JPY','USD/CHF','AUD/USD','USD/CAD','NZD/USD','XAU/USD','XAG/USD'];
+async function fetchPairTicker(){
+  const settled=await Promise.allSettled(PAIR_TICKER_LIST.map(sym=>fetchQuote(sym).then(q=>({sym,q}))));
+  const items=settled.filter(r=>r.status==='fulfilled').map(r=>r.value);
+  renderPairTicker(items);
+}
+function renderPairTicker(items){
+  const move=document.getElementById('pairTickerMove');
+  if(!move || !items.length) return;
+  const duration=Math.max(25, Math.min(70, items.length*6));
+  document.documentElement.style.setProperty('--mini-ticker-duration', duration+'s');
+  move.innerHTML=items.map(({sym,q})=>{
+    const dec=decimalsFor(sym), pct=+q.percent_change, up=pct>=0;
+    return `<span class="${up?'up':'down'}"><b>${sym}</b>${(+q.close).toFixed(dec)} (${up?'+':''}${pct.toFixed(2)}%)</span>`;
+  }).join('');
+}
+
 /* ============ Fundamental saham (mikro, khusus simbol saham/index) ============ */
 async function fetchStockFundamentals(symbol){
   const json=await fhRequest('stock/metric', { symbol, metric:'all' });
@@ -1154,48 +1196,6 @@ function renderMTF(htf, sig){
     <div class="cell"><div class="k">Trend HTF (${htf.interval.toUpperCase()})</div><div class="v ${htf.direction==='BUY'?'tp':htf.direction==='SELL'?'sl':''}">${htf.direction}</div></div>
     <div class="cell"><div class="k">ADX HTF</div><div class="v" style="font-size:15px;">${htf.adx.toFixed(1)}</div></div>
     <div class="cell"><div class="k">Status Konfluensi</div><div class="v" style="font-size:12.5px; color:${statusColor};">${sig.direction==='HOLD' ? '-' : aligned ? '✓ SEARAH HTF' : '⚠ BERLAWANAN HTF'}</div></div>`;
-}
-
-/* ============ Backtest ringan (dari candle yang sama, tanpa fetch tambahan) ============ */
-function backtestStrategy(candles){
-  const closes=candles.map(c=>c.close), highs=candles.map(c=>c.high), lows=candles.map(c=>c.low);
-  const ema9=ema(closes,9), ema21=ema(closes,21), rsiArr=rsi(closes,14), atrArr=atr(highs,lows,closes,14);
-  let wins=0, losses=0, totalR=0, openTrades=0;
-  const lookahead=20;
-  for(let i=22;i<closes.length-1;i++){
-    const prevDiff=ema9[i-1]-ema21[i-1], curDiff=ema9[i]-ema21[i], curRsi=rsiArr[i];
-    let dir=null;
-    if(prevDiff<=0 && curDiff>0 && curRsi<70) dir='BUY';
-    else if(prevDiff>=0 && curDiff<0 && curRsi>30) dir='SELL';
-    if(!dir) continue;
-    const entry=closes[i], a=atrArr[i];
-    if(!a) continue;
-    const sl = dir==='BUY'? entry-1.5*a : entry+1.5*a;
-    const tp1 = dir==='BUY'? entry+1.5*a : entry-1.5*a;
-    let outcome=null;
-    const end=Math.min(closes.length-1, i+lookahead);
-    for(let j=i+1;j<=end;j++){
-      if(dir==='BUY'){
-        if(lows[j]<=sl){ outcome='LOSS'; break; }
-        if(highs[j]>=tp1){ outcome='WIN'; break; }
-      } else {
-        if(highs[j]>=sl){ outcome='LOSS'; break; }
-        if(lows[j]<=tp1){ outcome='WIN'; break; }
-      }
-    }
-    if(outcome==='WIN'){ wins++; totalR+=1; } else if(outcome==='LOSS'){ losses++; totalR-=1; } else openTrades++;
-  }
-  const closedTrades=wins+losses;
-  return { wins, losses, closedTrades, openTrades, winRate: closedTrades? (wins/closedTrades*100):null, avgR: closedTrades? (totalR/closedTrades):null };
-}
-function renderBacktest(bt){
-  const el=document.getElementById('backtestArea');
-  if(!bt.closedTrades){ el.innerHTML='<div class="empty">Belum cukup sinyal historis untuk backtest di 100 bar ini.</div>'; return; }
-  el.innerHTML=`
-    <div class="cell"><div class="k">Sinyal Diuji</div><div class="v">${bt.closedTrades+bt.openTrades}</div></div>
-    <div class="cell"><div class="k">Win Rate</div><div class="v ${bt.winRate>=50?'tp':'sl'}">${bt.winRate.toFixed(0)}%</div></div>
-    <div class="cell"><div class="k">Menang / Kalah</div><div class="v">${bt.wins}W / ${bt.losses}L</div></div>
-    <div class="cell"><div class="k">Avg R (closed)</div><div class="v ${bt.avgR>=0?'tp':'sl'}">${bt.avgR>=0?'+':''}${bt.avgR.toFixed(2)}R</div></div>`;
 }
 
 /* ============ Alert: beep + browser notification saat sinyal baru ============ */
@@ -1295,7 +1295,6 @@ async function scan(){
     }catch(mtfErr){
       document.getElementById('mtfArea').innerHTML='<div class="empty">Gagal memuat data HTF untuk konfirmasi.</div>';
     }
-    renderBacktest(backtestStrategy(candles));
     const lot=estimateLot(balance, riskPct, sig.entry, sig.sl, symbol);
     lastSignal={...sig, lot};
     lastCandles=candles;
@@ -1671,6 +1670,9 @@ function connectBTCStream(){
 }
 connectBTCStream();
 setInterval(()=>{ if(btcLastPrice!=null) renderCorrelation(lastCorr, document.getElementById('symbol').value); }, 5000);
+
+fetchPairTicker();
+setInterval(fetchPairTicker, 60000);
 </script>
 </body>
 </html>
