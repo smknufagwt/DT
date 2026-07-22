@@ -458,7 +458,8 @@ footer a{color:var(--primary);}
   <section class="panel side" id="corrPanel">
     <h2 style="display:inline-block;">// Korelasi &amp; Sentimen Risiko</h2><span class="fresh-badge" id="corrFresh">-</span>
     <div class="sm-row" id="corrArea"><div class="empty">Menyambungkan live feed BTC/USDT...</div></div>
-    <div class="meta" style="margin-top:8px;">BTC/USDT jadi proxy sentimen risk-on/off (live via WebSocket Binance, gratis tanpa key). Korelasi dihitung dari return candle-close vs simbol aktif — gambaran kasar, bukan data institusional resmi (DXY).</div>
+    <div class="sm-row" id="dxyArea" style="margin-top:8px;"><div class="empty">Memuat DXY...</div></div>
+    <div class="meta" style="margin-top:8px;">BTC/USDT jadi proxy sentimen risk-on/off (live via WebSocket Binance, gratis tanpa key). DXY diambil live kalau provider mendukung; kalau tidak, dihitung sintetis dari kurs mayor FX yang sudah dimuat (tanpa request tambahan).</div>
   </section>
 
   <section class="panel">
@@ -485,8 +486,8 @@ footer a{color:var(--primary);}
   </section>
 
   <section class="panel side">
-    <h2>// Fed & Liquidity Watch</h2>
-    <div id="newsArea"><div class="empty">Masukkan Finnhub API key untuk memuat berita Fed & likuiditas pasar.</div></div>
+    <h2>// Berita</h2>
+    <div id="newsArea"><div class="empty">Memuat berita...</div></div>
   </section>
 
   <section class="panel" id="fundamentalPanel" style="display:none;">
@@ -525,6 +526,18 @@ async function tdRequest(endpoint, params){
   }
   const res=await fetch(url);
   return res.json();
+}
+/* ============ Batch request Twelve Data ============
+   TD mendukung symbol="A,B,C" dalam 1 request -> balikan { A:{...}, B:{...} }.
+   Dipakai supaya banyak simbol (pair ticker, DXY, HTF) tidak masing-masing
+   bikin request sendiri -- 1 request, banyak data, hemat kuota. */
+function splitBatchResult(json, symbols){
+  if(symbols.length===1) return { [symbols[0]]: json };
+  return (json && typeof json==='object') ? json : {};
+}
+async function fetchQuoteBatch(symbols){
+  const json=await tdRequest('quote', { symbol: symbols.join(',') });
+  return splitBatchResult(json, symbols);
 }
 async function fhRequest(endpoint, params){
   const manualKey=document.getElementById('newskey').value.trim();
@@ -800,11 +813,13 @@ function buildSignal(candles, symbol){
 /* ============ Chart rendering ============ */
 function drawChart(candles, symbol, sig){
   const canvas=document.getElementById('priceChart');
+  if(!canvas || !Array.isArray(candles) || !candles.length) return; // data belum siap -> jangan gambar apa-apa daripada error
   const chartWrapEl=document.querySelector('.chart-wrap');
   if(chartWrapEl){ chartWrapEl.classList.remove('redraw-fx'); void chartWrapEl.offsetWidth; chartWrapEl.classList.add('redraw-fx'); }
   const dpr=window.devicePixelRatio||1;
   const cssW=canvas.clientWidth, cssH=canvas.clientHeight||280;
-  canvas.width=cssW*dpr; canvas.height=cssH*dpr;
+  if(cssW<=0 || cssH<=0) return; // canvas belum ter-render (panel tersembunyi dsb) -> resize listener gambar ulang nanti
+  canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
   const ctx=canvas.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,cssW,cssH);
@@ -815,6 +830,7 @@ function drawChart(candles, symbol, sig){
   const bbFull=bollinger(closes,20,2);
   const viewLen=(typeof chartViewLen!=='undefined')?chartViewLen:60;
   const view=candles.slice(-viewLen);
+  if(!view.length) return;
   const off=candles.length-view.length;
   const ema9v=ema9.slice(-viewLen), ema21v=ema21.slice(-viewLen);
   const bbUpperV=bbFull.upper.slice(-viewLen), bbLowerV=bbFull.lower.slice(-viewLen);
@@ -1026,7 +1042,7 @@ function normalizeHeadline(h){
 async function fetchFinnhubNews(){
   const json=await fhRequest('news', { category:'forex' });
   if(!Array.isArray(json)) throw new Error('Finnhub: gagal memuat news.');
-  return json.slice(0,25).map(n=>({
+  return json.slice(0,35).map(n=>({
     headline:n.headline, url:n.url, source:n.source,
     ts:n.datetime*1000
   }));
@@ -1035,7 +1051,7 @@ async function fetchMarketauxNews(){
   // Sumber tambahan opsional. Kalau MARKETAUX_KEY belum di-set di server,
   // proxy akan balikin error -> ditangkap & diabaikan (graceful degrade),
   // jadi tidak wajib untuk situs tetap jalan.
-  const json=await tdRequestGeneric('mx', 'news/all', { search:'forex OR dollar OR "interest rate" OR gold OR fed', language:'en', limit:20 });
+  const json=await tdRequestGeneric('mx', 'news/all', { search:'forex OR dollar OR "interest rate" OR gold OR fed', language:'en', limit:30 });
   if(!json || !Array.isArray(json.data)) throw new Error('Marketaux: tidak tersedia.');
   return json.data.map(n=>({
     headline:n.title, url:n.url, source:n.source||'Marketaux',
@@ -1065,15 +1081,15 @@ async function fetchNews(){
     throw new Error('Gagal memuat news dari semua sumber. Cek API key.');
   }
   combined.sort((a,b)=>b.ts-a.ts);
-  return combined.slice(0,30);
+  return combined.slice(0,35);
 }
 function renderNews(items){
   const area=document.getElementById('newsArea');
   if(!items.length){ area.innerHTML='<div class="empty">Tidak ada berita ditemukan.</div>'; return; }
-  const priority=items.filter(n=>n.tag!=='gen').slice(0,10);
-  const list=priority.length?priority:items.slice(0,10);
+  // tampilkan full list (sampai 35) supaya panel selalu terisi penuh,
+  // bukan cuma yang tag-nya "prioritas" (fed/data/komoditas/geo) seperti sebelumnya.
   area.innerHTML=`<div class="meta" style="margin-bottom:8px;">${items.length} berita · diperbarui ${new Date().toLocaleTimeString('id-ID')} · sumber: ${[...new Set(items.map(n=>n.source))].slice(0,4).join(', ')}</div>` +
-    list.map(n=>`
+    items.slice(0,35).map(n=>`
     <div class="news-item">
       <span class="news-tag ${n.cls}">${n.label}</span>
       <a href="${n.url}" target="_blank" rel="noopener">${n.headline}</a>
@@ -1090,12 +1106,9 @@ function renderTicker(items){
   move.innerHTML=items.slice(0,20).map(n=>`<span class="${n.tag!=='gen'?'fed-hl':''}">${n.tag!=='gen'?'⚡ '+n.label+': ':'▸ '}${n.headline}</span>`).join('');
 }
 
-/* ============ Quote real-time (harga sekarang, spesifik) ============ */
-async function fetchQuote(symbol){
-  const json=await tdRequest('quote', { symbol });
-  if(json.status==='error' || !json.close) throw new Error(json.message || 'Gagal ambil quote real-time.');
-  return json;
-}
+/* ============ Quote real-time (harga sekarang, spesifik) ============
+   Dulu fetch sendiri per simbol; sekarang datanya datang dari fetchQuoteBatch
+   (lihat fetchPairTicker/fastRefresh) supaya tidak ada request quote ganda. */
 function renderFreshBadge(elId, meta){
   const el=document.getElementById(elId);
   if(!el) return;
@@ -1110,10 +1123,10 @@ function flashEl(el){
   void el.offsetWidth;
   el.classList.add('flash-update');
 }
-function renderQuote(q, symbol){
+function renderQuote(q, symbol, cacheMeta){
   const dec=decimalsFor(symbol);
   const chg=+q.change, chgPct=+q.percent_change;
-  renderFreshBadge('quoteFresh', q._cacheMeta);
+  renderFreshBadge('quoteFresh', cacheMeta);
   document.getElementById('quoteArea').innerHTML=`
     <div class="cell"><div class="k">Harga Sekarang</div><div class="v">${(+q.close).toFixed(dec)}</div></div>
     <div class="cell"><div class="k">Open</div><div class="v">${(+q.open).toFixed(dec)}</div></div>
@@ -1126,13 +1139,19 @@ function renderQuote(q, symbol){
   flashEl(document.getElementById('quoteArea'));
 }
 
-/* ============ Mini ticker: dashboard harga pair lain (reuse fetchQuote/proxy, TTL cache
-   server sudah shared ke semua pengunjung, jadi polling 60d tetap hemat kuota) ============ */
+/* ============ Mini ticker: dashboard harga pair lain ============
+   Dulu 9 simbol = 9 request quote terpisah tiap polling. Sekarang semua
+   (9 pair + DXY + simbol aktif) digabung jadi SATU request batch TD, hasilnya
+   dipakai ulang juga oleh quote panel & DXY -- bukan cuma buat ticker. */
 const PAIR_TICKER_LIST=['EUR/USD','GBP/USD','USD/JPY','USD/CHF','AUD/USD','USD/CAD','NZD/USD','XAU/USD','XAG/USD'];
-async function fetchPairTicker(){
-  const settled=await Promise.allSettled(PAIR_TICKER_LIST.map(sym=>fetchQuote(sym).then(q=>({sym,q}))));
-  const items=settled.filter(r=>r.status==='fulfilled').map(r=>r.value);
+async function fetchPairTicker(activeSymbol){
+  const symbols=[...new Set([...PAIR_TICKER_LIST, 'DXY', activeSymbol].filter(Boolean))];
+  const batch=await fetchQuoteBatch(symbols);
+  const items=PAIR_TICKER_LIST
+    .map(sym=>({ sym, q:batch[sym] }))
+    .filter(({q})=>q && q.close && q.status!=='error');
   renderPairTicker(items);
+  return batch;
 }
 function renderPairTicker(items){
   const move=document.getElementById('pairTickerMove');
@@ -1285,16 +1304,25 @@ async function scan(){
 
   btn.disabled=true; btn.textContent='Scanning...';
   try{
-    const candles=await fetchCandles(symbol, interval);
+    // candle utama + bias HTF dijalankan BARENGAN (bukan HTF nyusul setelah
+    // sinyal utama selesai) -> keduanya dari siklus fetch yang sama, hasil
+    // konfirmasi multi-timeframe lebih sinkron & scan jadi lebih cepat.
+    const [candlesRes, htfRes]=await Promise.allSettled([
+      fetchCandles(symbol, interval),
+      fetchHTFBias(symbol, interval)
+    ]);
+    if(candlesRes.status==='rejected') throw candlesRes.reason;
+    const candles=candlesRes.value;
     const sig=buildSignal(candles, symbol);
     const trendAdx=adxValue(candles.map(c=>c.high), candles.map(c=>c.low), candles.map(c=>c.close));
-    try{
-      const htfBias=await fetchHTFBias(symbol, interval);
-      applyMTF(sig, htfBias);
-      renderMTF(htfBias, sig);
-    }catch(mtfErr){
+
+    if(htfRes.status==='fulfilled'){
+      applyMTF(sig, htfRes.value);
+      renderMTF(htfRes.value, sig);
+    } else {
       document.getElementById('mtfArea').innerHTML='<div class="empty">Gagal memuat data HTF untuk konfirmasi.</div>';
     }
+
     const lot=estimateLot(balance, riskPct, sig.entry, sig.sl, symbol);
     lastSignal={...sig, lot};
     lastCandles=candles;
@@ -1324,40 +1352,20 @@ async function scan(){
     btn.disabled=riskLocked; btn.textContent='Scan Sinyal';
   }
 
-  try{
-    const items=await fetchNews();
-    renderNews(items);
-    renderTicker(items);
-  }catch(e){
-    document.getElementById('newsArea').innerHTML=`<div class="empty">${e.message}</div>`;
-  }
-
-  try{
-    const q=await fetchQuote(symbol);
-    renderQuote(q, symbol);
-  }catch(e){
-    document.getElementById('quoteArea').innerHTML=`<div class="empty">${e.message}</div>`;
-  }
-
-  try{
-    const cotRows=await fetchCOTCached(symbol);
-    renderCOT(cotRows, symbol);
-  }catch(e){
-    document.getElementById('cotArea').innerHTML=`<div class="empty">${e.message}</div>`;
-  }
-
+  // Quote & berita sudah ditangani fastRefresh() (independen, 1-2x/menit).
+  // COT & fundamental saham: independen satu sama lain -> jalan paralel.
   const fundPanel=document.getElementById('fundamentalPanel');
-  if(!symbol.includes('/')){
-    fundPanel.style.display='block';
-    try{
-      const m=await fetchStockFundamentals(symbol);
-      renderFundamentals(m);
-    }catch(e){
-      document.getElementById('fundamentalArea').innerHTML=`<div class="empty">${e.message}</div>`;
-    }
-  } else {
-    fundPanel.style.display='none';
-  }
+  const isStock=!symbol.includes('/');
+  fundPanel.style.display=isStock?'block':'none';
+  await Promise.allSettled([
+    fetchCOTCached(symbol)
+      .then(rows=>renderCOT(rows, symbol))
+      .catch(e=>{ document.getElementById('cotArea').innerHTML=`<div class="empty">${e.message}</div>`; }),
+    isStock ? fetchStockFundamentals(symbol)
+      .then(renderFundamentals)
+      .catch(e=>{ document.getElementById('fundamentalArea').innerHTML=`<div class="empty">${e.message}</div>`; })
+      : Promise.resolve()
+  ]);
   isScanning=false;
 }
 
@@ -1671,8 +1679,67 @@ function connectBTCStream(){
 connectBTCStream();
 setInterval(()=>{ if(btcLastPrice!=null) renderCorrelation(lastCorr, document.getElementById('symbol').value); }, 5000);
 
-fetchPairTicker();
-setInterval(fetchPairTicker, 60000);
+/* ============ DXY & korelasi risiko dollar ============
+   Prioritas: DXY asli dari Twelve Data, digabung dalam batch quote yang sama
+   (tidak nambah request). Kalau provider gratis tidak menyediakan simbol DXY,
+   fallback ke DXY sintetis dari rumus ICE USDX pakai kurs mayor yang sudah
+   ada di batch itu juga (tanpa komponen USD/SEK -> diberi label "sintetis").
+   Korelasi dihitung dari rolling buffer sample tiap fast-refresh (gratis,
+   tanpa request tambahan), pakai pearson() yang sama dengan korelasi BTC. */
+const dxyBuffer=[], dxySymBuffer=[];
+const DXY_BUFFER_MAX=60;
+let dxySource='none'; // 'live' | 'synthetic' | 'none'
+
+function computeSyntheticDXY(batch){
+  const eur=+batch['EUR/USD']?.close, jpy=+batch['USD/JPY']?.close, gbp=+batch['GBP/USD']?.close,
+        cad=+batch['USD/CAD']?.close, chf=+batch['USD/CHF']?.close;
+  if(![eur,jpy,gbp,cad,chf].every(v=>isFinite(v) && v>0)) return null;
+  return 50.14348112*Math.pow(eur,-0.576)*Math.pow(jpy,0.136)*Math.pow(gbp,-0.119)*Math.pow(cad,0.091)*Math.pow(chf,0.036);
+}
+function updateDXY(batch, symbol){
+  const live=batch['DXY'];
+  let dxyVal;
+  if(live && live.close && live.status!=='error'){ dxyVal=+live.close; dxySource='live'; }
+  else{ dxyVal=computeSyntheticDXY(batch); dxySource=dxyVal!=null?'synthetic':'none'; }
+
+  const symQ=batch[symbol];
+  if(dxyVal!=null){ dxyBuffer.push(dxyVal); if(dxyBuffer.length>DXY_BUFFER_MAX) dxyBuffer.shift(); }
+  if(symQ && symQ.close){ dxySymBuffer.push(+symQ.close); if(dxySymBuffer.length>DXY_BUFFER_MAX) dxySymBuffer.shift(); }
+  const corr=(dxyBuffer.length>=8 && dxySymBuffer.length>=8) ? pearson(toReturns(dxyBuffer), toReturns(dxySymBuffer)) : null;
+  renderDXY(dxyVal, corr, symbol);
+}
+function renderDXY(dxyVal, corr, symbol){
+  const el=document.getElementById('dxyArea');
+  if(!el) return;
+  if(dxyVal==null){ el.innerHTML='<div class="empty">DXY tidak tersedia dari provider gratis saat ini.</div>'; return; }
+  const lbl=corrLabel(corr);
+  const srcTxt=dxySource==='live' ? 'live TD' : 'sintetis, proxy mayor FX';
+  el.innerHTML=`
+    <div class="sm-cell"><div class="k">DXY (${srcTxt})</div><div class="sm-num">${dxyVal.toFixed(2)}</div></div>
+    <div class="sm-cell"><div class="k">Korelasi vs ${symbol}</div><div class="sm-num ${lbl.cls}">${corr!=null?corr.toFixed(2):'-'}</div><div class="sm-delta">${lbl.text}</div></div>`;
+}
+
+/* ============ Siklus refresh cepat (quote, DXY, ticker, berita) ============
+   Dipisah dari siklus scan (candle/HTF/COT/fundamental) yang ikut timeframe
+   chart -- di TF besar (1h/4h/1day) siklus itu bisa 15-60 menit sekali.
+   Quote, DXY, dan berita tetap perlu update rutin berapa pun timeframe-nya,
+   jadi loop ini jalan sendiri tiap 45 detik (1-2x/menit), tetap 1 request
+   batch untuk semua quote (lihat fetchPairTicker). */
+const FAST_REFRESH_MS=45*1000;
+async function fastRefresh(){
+  const symbol=document.getElementById('symbol').value;
+  const [quoteRes, newsRes]=await Promise.allSettled([ fetchPairTicker(symbol), fetchNews() ]);
+  if(quoteRes.status==='fulfilled'){
+    const batch=quoteRes.value;
+    const q=batch[symbol];
+    if(q && q.close) renderQuote(q, symbol, batch._cacheMeta); else document.getElementById('quoteArea').innerHTML='<div class="empty">Quote tidak tersedia.</div>';
+    updateDXY(batch, symbol);
+  }
+  if(newsRes.status==='fulfilled'){ renderNews(newsRes.value); renderTicker(newsRes.value); }
+  else document.getElementById('newsArea').innerHTML='<div class="empty">Gagal memuat berita dari semua sumber.</div>';
+}
+fastRefresh();
+setInterval(fastRefresh, FAST_REFRESH_MS);
 </script>
 </body>
 </html>
