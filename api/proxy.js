@@ -1,4 +1,3 @@
-
 // Vercel Serverless Function: /api/proxy
 // Meneruskan request ke Twelve Data / Finnhub dengan API key dari
 // Environment Variables (di-set di dashboard Vercel). Key tidak pernah
@@ -23,6 +22,18 @@ function cleanupVisitors() {
 }
  
 const cacheStore = globalThis.__dtCache || (globalThis.__dtCache = new Map());
+// In-flight dedupe: kalau 2+ request identik (key sama) datang BARENGAN sebelum
+// yang pertama selesai, request ke-2 dst nunggu promise yang sama alih-alih
+// ikut fetch ke upstream lagi -- kasus nyata: banyak visitor auto-scan pair
+// yang sama persis di detik yang hampir bersamaan.
+const inFlight = globalThis.__dtInFlight || (globalThis.__dtInFlight = new Map());
+
+async function fetchUpstream(url, timeoutMs=10000){
+  const ac=new AbortController();
+  const timer=setTimeout(()=>ac.abort(), timeoutMs);
+  try{ return await fetch(url, { signal:ac.signal }); }
+  finally{ clearTimeout(timer); }
+}
  
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -146,30 +157,41 @@ export default async function handler(req, res) {
   }
  
   const wrap = (d, meta) => Array.isArray(d) ? d : { ...d, _cacheMeta: meta }; // array (mis. CFTC) jangan di-spread, rusak strukturnya
- 
-  try {
-    const upstream = await fetch(url);
+
+  // Kalau ada request identik yang lagi in-flight (key sama), ikut nunggu promise itu
+  // alih-alih ikut fetch baru ke upstream -- kasus nyata: banyak visitor auto-scan
+  // pair yang sama persis nyaris berbarengan.
+  if (inFlight.has(key)) {
+    try {
+      const data = await inFlight.get(key);
+      return res.status(200).json(wrap(data, { cached: false, ageMs: 0, deduped: true }));
+    } catch (e) { /* request yg di-dedupe gagal -> lanjut coba fetch sendiri di bawah */ }
+  }
+
+  const doFetch = (async () => {
+    const upstream = await fetchUpstream(url);
     const data = await upstream.json();
- 
-    // Kalau upstream sukses (bukan error rate-limit dsb), simpan ke cache & hitung kuota.
-    const looksOk = !(data && data.status === 'error');
-    if (looksOk) {
-      cacheStore.set(key, { ts: now, data });
+    if (!(data && data.status === 'error')) {
+      cacheStore.set(key, { ts: Date.now(), data });
       bumpQuota(provider);
-      return res.status(upstream.status).json(wrap(data, { cached: false, ageMs: 0 }));
+      return data;
     }
- 
-    // Upstream error (misal limit habis) -> kalau ada cache lama (meski sudah expired), pakai itu
+    throw Object.assign(new Error('upstream_error'), { data, status: upstream.status });
+  })();
+  inFlight.set(key, doFetch);
+
+  try {
+    const data = await doFetch;
+    return res.status(200).json(wrap(data, { cached: false, ageMs: 0 }));
+  } catch (e) {
+    // Upstream error/timeout -> kalau ada cache lama (meski sudah expired), pakai itu
     // daripada nampilin error ke user. Lebih baik data agak basi daripada tidak ada sama sekali.
     if (cached) {
       return res.status(200).json(wrap(cached.data, { cached: true, stale: true, ageMs: now - cached.ts }));
     }
-    return res.status(upstream.status).json(data);
-  } catch (e) {
-    if (cached) {
-      return res.status(200).json(wrap(cached.data, { cached: true, stale: true, ageMs: now - cached.ts }));
-    }
+    if (e.data) return res.status(e.status || 500).json(e.data);
     return res.status(500).json({ error: 'Gagal fetch upstream: ' + e.message });
+  } finally {
+    inFlight.delete(key);
   }
 }
- 
