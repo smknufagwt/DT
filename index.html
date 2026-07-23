@@ -71,13 +71,16 @@ h1{
 .risk-banner.pulse-warn{ animation:warnPulse 1.8s ease-in-out infinite; }
 @keyframes warnPulse{ 0%,100%{box-shadow:0 0 0 rgba(255,46,99,0);} 50%{box-shadow:0 0 16px rgba(255,46,99,.45);} }
 
-/* panel */
+/* panel — compact: padding/margin diperkecil, tapi tetap animated saat masuk.
+   Delay per-panel dihitung dari nth-of-type via CSS var --i (di-set inline di JS/HTML
+   kalau perlu stagger; default 0 supaya tetap ringan tanpa JS tambahan). */
 .panel{
   background:var(--panel); border:1px solid var(--border); border-radius:6px;
-  padding:18px; margin-bottom:18px; position:relative; overflow:hidden;
-  animation:panelIn .45s ease-out both; /* sekali saat render, bukan loop -- nol biaya setelah selesai */
+  padding:14px; margin-bottom:12px; position:relative; overflow:hidden;
+  animation:panelIn .4s ease-out both;
+  animation-delay:calc(var(--i, 0) * 40ms);
 }
-@keyframes panelIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+@keyframes panelIn{ from{opacity:0; transform:translateY(6px) scale(.99);} to{opacity:1; transform:translateY(0) scale(1);} }
 /* aksen "scan" bergerak di tepi atas tiap panel -- 1 pseudo-element per panel,
    cuma transform (GPU compositor), biaya konstan sama seperti animasi lain di file ini */
 .panel::before{
@@ -88,14 +91,14 @@ h1{
 @keyframes panelScan{ from{transform:translateX(0);} to{transform:translateX(320%);} }
 @media (prefers-reduced-motion:reduce){ .panel::before{animation:none; display:none;} }
 .panel h2{
-  font-family:'Orbitron',sans-serif; font-size:13px; color:var(--primary); letter-spacing:1.5px;
-  margin-bottom:14px; text-transform:uppercase;
+  font-family:'Orbitron',sans-serif; font-size:12.5px; color:var(--primary); letter-spacing:1.5px;
+  margin-bottom:10px; text-transform:uppercase;
 }
-.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px;}
-label{display:block; font-size:10.5px; color:var(--muted); margin-bottom:5px; letter-spacing:.5px; text-transform:uppercase;}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;}
+label{display:block; font-size:10.5px; color:var(--muted); margin-bottom:4px; letter-spacing:.5px; text-transform:uppercase;}
 input,select{
   width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
-  font-family:'JetBrains Mono',monospace; font-size:13px; padding:9px 10px; border-radius:4px;
+  font-family:'JetBrains Mono',monospace; font-size:13px; padding:8px 9px; border-radius:4px;
   outline:none;
 }
 input:focus,select:focus{border-color:var(--primary);}
@@ -130,13 +133,14 @@ button.ghost{
 }
 @keyframes badgePulse{ 0%{transform:scale(1); opacity:.5;} 70%{transform:scale(1.14); opacity:0;} 100%{opacity:0;} }
 
-.meta{font-size:11px; color:var(--muted); margin-top:6px;}
+.meta{font-size:11px; color:var(--muted); margin-top:5px;}
 .data-grid{
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-top:16px;
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); gap:8px; margin-top:12px;
 }
-.cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px; transition:border-color .3s;}
-.cell .k{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
-.cell .v{font-size:16px; font-weight:700; margin-top:3px; overflow-wrap:break-word; word-break:break-word;}
+.cell{background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:8px 10px; transition:border-color .3s, transform .15s;}
+.cell:hover{transform:translateY(-1px); border-color:var(--primary);}
+.cell .k{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
+.cell .v{font-size:14.5px; font-weight:700; margin-top:2px; overflow-wrap:break-word; word-break:break-word;}
 .cell .v.sl{color:var(--red);}
 .cell .v.tp{color:var(--primary);}
 
@@ -288,13 +292,13 @@ footer a{color:var(--primary);}
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
 
   <header>
     <h1>SIGNAL::ENGINE</h1>
     <div class="sub">FOREX & METAL & SAHAM NASDAQ — TECHNICAL SIGNAL GENERATOR</div>
     <div class="boot" id="bootLine"></div>
-    <div class="sub" id="visitorStatus"></div>
+    <div class="sub" id="visitorStatus" aria-live="polite"></div>
   </header>
 
   <div class="risk-banner">
@@ -302,21 +306,21 @@ footer a{color:var(--primary);}
     Trading forex & logam mengandung risiko kehilangan modal. Uji di akun demo sebelum live, dan gunakan money management yang wajar.
   </div>
 
-  <section class="panel side">
+  <aside class="panel side">
     <h2 style="display:inline-block;">// Smart Money / COT Positioning</h2><span class="fresh-badge" id="cotFresh">-</span>
-    <div class="sm-row" id="cotArea"><div class="empty">Data CFTC (Commitment of Traders) dimuat saat scan sinyal.</div></div>
+    <div class="sm-row" id="cotArea" aria-live="polite"><div class="empty">Data CFTC (Commitment of Traders) dimuat saat scan sinyal.</div></div>
     <div class="meta" style="margin-top:8px;">Sumber: CFTC Legacy Futures Only (mingguan, rilis tiap Jumat). Non-Commercial = large speculators/funds (sering disebut "smart money" di analisis retail); net posisi & perubahan mingguan jadi konfirmasi arah tren institusional, bukan sinyal entry langsung.</div>
-  </section>
+  </aside>
 
   <section class="panel">
     <h2>// Konfigurasi</h2>
     <div class="grid">
       <div>
-        <label>Twelve Data Key (fallback)</label>
+        <label for="apikey">Twelve Data Key (fallback)</label>
         <input id="apikey" type="password" placeholder="Kosongkan jika sudah di-set via secret">
       </div>
       <div>
-        <label>Pair</label>
+        <label for="symbol">Pair</label>
         <select id="symbol">
           <optgroup label="Forex Major">
             <option value="EUR/USD">EUR/USD</option>
@@ -344,7 +348,7 @@ footer a{color:var(--primary);}
         </select>
       </div>
       <div>
-        <label>Timeframe (Gaya Trading)</label>
+        <label for="interval">Timeframe (Gaya Trading)</label>
         <select id="interval">
           <optgroup label="Scalping">
             <option value="1min">M1 — Scalping</option>
@@ -363,7 +367,7 @@ footer a{color:var(--primary);}
     </div>
     <div class="grid" style="margin-top:12px;">
       <div>
-        <label>Finnhub Key (fallback)</label>
+        <label for="newskey">Finnhub Key (fallback)</label>
         <input id="newskey" type="password" placeholder="Kosongkan jika sudah di-set via secret">
       </div>
     </div>
@@ -376,22 +380,22 @@ footer a{color:var(--primary);}
       <button class="ghost" id="copyBtn" disabled>Copy Rencana Trading</button>
       <button class="ghost" id="alertBtn">🔕 Aktifkan Alert</button>
     </div>
-    <div class="error" id="errBox"></div>
+    <div class="error" id="errBox" role="alert" aria-live="assertive"></div>
   </section>
 
   <section class="panel">
     <h2>// Risk Guard & Jurnal Harian</h2>
     <div class="grid">
       <div>
-        <label>Saldo Akun ($)</label>
+        <label for="balance">Saldo Akun ($)</label>
         <input id="balance" type="number" value="1000" min="0">
       </div>
       <div>
-        <label>Risiko per Trade (%)</label>
+        <label for="riskPct">Risiko per Trade (%)</label>
         <input id="riskPct" type="number" value="1" min="0.1" step="0.1">
       </div>
       <div>
-        <label>Max Rugi Harian (R)</label>
+        <label for="maxLossR">Max Rugi Harian (R)</label>
         <input id="maxLossR" type="number" value="3" min="0.5" step="0.5">
       </div>
     </div>
@@ -409,7 +413,7 @@ footer a{color:var(--primary);}
 
   <section class="panel">
     <h2 style="display:inline-block;">// Harga Real-Time (Quote)</h2><span class="fresh-badge" id="quoteFresh">-</span>
-    <div class="data-grid" id="quoteArea"><div class="empty">Klik "Scan Sinyal" untuk memuat harga real-time.</div></div>
+    <div class="data-grid" id="quoteArea" aria-live="polite"><div class="empty">Klik "Scan Sinyal" untuk memuat harga real-time.</div></div>
   </section>
 
   <section class="panel">
@@ -430,12 +434,12 @@ footer a{color:var(--primary);}
       <button data-len="100">100</button>
     </div>
     <div class="chart-wrap">
-      <canvas id="priceChart"></canvas>
+      <canvas id="priceChart" role="img" aria-label="Grafik candlestick harga dengan EMA9, EMA21, dan Bollinger Band"></canvas>
       <div class="crosshair-box" id="crossBox"></div>
     </div>
   </section>
 
-  <section class="panel side">
+  <aside class="panel side">
     <h2>// Sesi Pasar</h2>
     <div class="grid" id="sessionArea"></div>
     <div class="meta" style="margin-top:14px;">// Kalender Ekonomi (Fundamental Makro)</div>
@@ -453,24 +457,24 @@ footer a{color:var(--primary);}
       }
       </script>
     </div>
-  </section>
+  </aside>
 
-  <section class="panel side" id="corrPanel">
+  <aside class="panel side" id="corrPanel">
     <h2 style="display:inline-block;">// Korelasi &amp; Sentimen Risiko</h2><span class="fresh-badge" id="corrFresh">-</span>
-    <div class="sm-row" id="corrArea"><div class="empty">Menyambungkan live feed BTC/USDT...</div></div>
-    <div class="sm-row" id="dxyArea" style="margin-top:8px;"><div class="empty">Memuat DXY...</div></div>
-    <div class="meta" style="margin-top:8px;">BTC/USDT jadi proxy sentimen risk-on/off (live via WebSocket Binance, gratis tanpa key). DXY diambil live kalau provider mendukung; kalau tidak, dihitung sintetis dari kurs mayor FX yang sudah dimuat (tanpa request tambahan).</div>
-  </section>
+    <div class="sm-row" id="corrArea" aria-live="polite"><div class="empty">Menyambungkan live feed BTC/USDT...</div></div>
+    <div class="sm-row" id="dxyArea" aria-live="polite" style="margin-top:8px;"><div class="empty">Memuat DXY...</div></div>
+    <div class="meta" style="margin-top:8px;">BTC/USDT jadi proxy sentimen risk-on/off (live via WebSocket Binance, gratis tanpa key). DXY diambil live kalau provider mendukung; kalau tidak, dihitung sintetis dari kurs mayor FX yang sudah dimuat (tanpa request tambahan). VIX &amp; rasio Gold/Silver ikut satu batch quote yang sama.</div>
+  </aside>
 
   <section class="panel">
     <h2>// Sinyal Aktif</h2>
-    <div id="signalArea"><div class="empty">Belum ada sinyal. Masukkan API key lalu klik "Scan Sinyal".</div></div>
-    <div class="data-grid" id="pivotArea" style="margin-top:14px;"></div>
+    <div id="signalArea" aria-live="polite"><div class="empty">Belum ada sinyal. Masukkan API key lalu klik "Scan Sinyal".</div></div>
+    <div class="data-grid" id="pivotArea" aria-live="polite" style="margin-top:14px;"></div>
   </section>
 
   <section class="panel">
     <h2>// Konfirmasi Multi-Timeframe</h2>
-    <div class="data-grid" id="mtfArea"><div class="empty">Dimuat saat scan sinyal.</div></div>
+    <div class="data-grid" id="mtfArea" aria-live="polite"><div class="empty">Dimuat saat scan sinyal.</div></div>
     <div class="meta" style="margin-top:8px;">Trend EMA9/21 + ADX di timeframe lebih besar dipakai sebagai filter arah — sinyal yang searah HTF lebih layak dipercaya, yang berlawanan otomatis diturunkan confidence-nya.</div>
   </section>
 
@@ -478,21 +482,22 @@ footer a{color:var(--primary);}
     <h2>// Riwayat Sesi</h2>
     <div class="table-scroll">
     <table id="historyTable">
-      <thead><tr><th>Waktu</th><th>Pair</th><th>Arah</th><th>Entry</th><th>SL</th><th>TP1</th><th>Conf.</th></tr></thead>
+      <caption class="meta" style="text-align:left; margin-bottom:6px;">Riwayat sinyal yang pernah dihasilkan pada sesi ini</caption>
+      <thead><tr><th scope="col">Waktu</th><th scope="col">Pair</th><th scope="col">Arah</th><th scope="col">Entry</th><th scope="col">SL</th><th scope="col">TP1</th><th scope="col">Conf.</th></tr></thead>
       <tbody id="historyBody"></tbody>
     </table>
     </div>
     <div class="empty" id="historyEmpty">Riwayat kosong.</div>
   </section>
 
-  <section class="panel side">
+  <aside class="panel side">
     <h2>// Berita</h2>
-    <div id="newsArea"><div class="empty">Memuat berita...</div></div>
-  </section>
+    <div id="newsArea" aria-live="polite"><div class="empty">Memuat berita...</div></div>
+  </aside>
 
   <section class="panel" id="fundamentalPanel" style="display:none;">
     <h2>// Fundamental Saham (Mikro)</h2>
-    <div class="data-grid" id="fundamentalArea"></div>
+    <div class="data-grid" id="fundamentalArea" aria-live="polite"></div>
   </section>
 
   <footer>
@@ -502,19 +507,53 @@ footer a{color:var(--primary);}
     Lot size adalah estimasi (asumsi 1 lot = 100.000 unit FX / 100 oz XAU) — sesuaikan dengan spesifikasi kontrak broker Anda sebelum eksekusi di MT5.
     <div style="margin-top:10px; opacity:.7;">© 2026 Arlingkin · Telegram: <a href="https://t.me/arlingkin" target="_blank" rel="noopener">t.me/arlingkin</a></div>
   </footer>
-</div>
+</main>
 
-<div class="ticker-bar">
+<div class="ticker-bar" role="marquee" aria-label="Live news ticker">
   <div class="ticker-label">LIVE NEWS</div>
   <div class="ticker-track"><div class="ticker-move" id="tickerMove"><span>Menunggu API key Finnhub untuk memuat live news...</span></div></div>
   <div class="ticker-clock" id="tickerClock">--:--:-- <span class="tz">WIB (UTC+7)</span></div>
 </div>
 
 <script>
+/* ============ Request layer: timeout + retry + abort ============
+   Semua fetch API (TD/FH/proxy) lewat sini. Sebelumnya fetch() polos tanpa
+   timeout -> koneksi lambat/hang bikin tombol "Scanning..." macet selamanya.
+   Sekarang: timeout keras per request + 1x retry untuk error transient
+   (network/timeout/5xx), TIDAK retry untuk 4xx (kunci salah dsb, percuma diulang). */
+async function fetchWithTimeout(url, { timeoutMs=12000, signal }={}){
+  const ac=new AbortController();
+  const onAbort=()=>ac.abort();
+  if(signal){ if(signal.aborted) ac.abort(); else signal.addEventListener('abort', onAbort); }
+  const timer=setTimeout(()=>ac.abort(), timeoutMs);
+  try{
+    const res=await fetch(url, { signal:ac.signal });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res;
+  } finally {
+    clearTimeout(timer);
+    if(signal) signal.removeEventListener('abort', onAbort);
+  }
+}
+async function requestJSON(url, opts={}){
+  try{
+    const res=await fetchWithTimeout(url, opts);
+    return await res.json();
+  }catch(e){
+    if(e.name==='AbortError' && opts.signal && opts.signal.aborted) throw e; // dibatalkan sengaja (ganti pair) -> jangan retry
+    // retry sekali untuk timeout/network/5xx (bukan error 4xx dari kita sendiri)
+    if(!/^HTTP 4\d\d$/.test(e.message)){
+      await new Promise(r=>setTimeout(r, 600));
+      const res=await fetchWithTimeout(url, opts);
+      return await res.json();
+    }
+    throw e;
+  }
+}
 /* Strategi key: kalau kolom manual diisi -> panggil API langsung (gampang untuk testing).
    Kalau kolom manual KOSONG -> panggil lewat /api/proxy (serverless function di Vercel)
    yang membaca key dari Environment Variable server-side. Key TIDAK PERNAH sampai ke browser. */
-async function tdRequest(endpoint, params){
+async function tdRequest(endpoint, params, opts={}){
   const manualKey=document.getElementById('apikey').value.trim();
   let url;
   if(manualKey){
@@ -524,8 +563,7 @@ async function tdRequest(endpoint, params){
     const qs=new URLSearchParams({provider:'td', endpoint, ...params});
     url=`/api/proxy?${qs.toString()}`;
   }
-  const res=await fetch(url);
-  return res.json();
+  return requestJSON(url, opts);
 }
 /* ============ Batch request Twelve Data ============
    TD mendukung symbol="A,B,C" dalam 1 request -> balikan { A:{...}, B:{...} }.
@@ -535,11 +573,11 @@ function splitBatchResult(json, symbols){
   if(symbols.length===1) return { [symbols[0]]: json };
   return (json && typeof json==='object') ? json : {};
 }
-async function fetchQuoteBatch(symbols){
-  const json=await tdRequest('quote', { symbol: symbols.join(',') });
+async function fetchQuoteBatch(symbols, opts={}){
+  const json=await tdRequest('quote', { symbol: symbols.join(',') }, opts);
   return splitBatchResult(json, symbols);
 }
-async function fhRequest(endpoint, params){
+async function fhRequest(endpoint, params, opts={}){
   const manualKey=document.getElementById('newskey').value.trim();
   let url;
   if(manualKey){
@@ -549,8 +587,7 @@ async function fhRequest(endpoint, params){
     const qs=new URLSearchParams({provider:'fh', endpoint, ...params});
     url=`/api/proxy?${qs.toString()}`;
   }
-  const res=await fetch(url);
-  return res.json();
+  return requestJSON(url, opts);
 }
 
 /* ============ Boot line typewriter ============ */
@@ -740,8 +777,8 @@ function contractSizeFor(sym){
 }
 
 /* ============ Fetch candles ============ */
-async function fetchCandles(symbol, interval){
-  const json=await tdRequest('time_series', { symbol, interval, outputsize:100 });
+async function fetchCandles(symbol, interval, opts={}){
+  const json=await tdRequest('time_series', { symbol, interval, outputsize:100 }, opts);
   if(json.status==='error' || !json.values) throw new Error(json.message || 'Gagal mengambil data. Cek API key / limit request.');
   return json.values.slice().reverse().map(v=>({
     time:v.datetime, open:+v.open, high:+v.high, low:+v.low, close:+v.close
@@ -1145,7 +1182,9 @@ function renderQuote(q, symbol, cacheMeta){
    dipakai ulang juga oleh quote panel & DXY -- bukan cuma buat ticker. */
 const PAIR_TICKER_LIST=['EUR/USD','GBP/USD','USD/JPY','USD/CHF','AUD/USD','USD/CAD','NZD/USD','XAU/USD','XAG/USD'];
 async function fetchPairTicker(activeSymbol){
-  const symbols=[...new Set([...PAIR_TICKER_LIST, 'DXY', activeSymbol].filter(Boolean))];
+  // VIX ikut dalam batch yang sama (bukan request terpisah) -> dipakai sbg sentimen
+  // risk-on/off Nasdaq di panel Korelasi & Sentimen, gratis dari sisi kuota.
+  const symbols=[...new Set([...PAIR_TICKER_LIST, 'DXY', 'VIX', activeSymbol].filter(Boolean))];
   const batch=await fetchQuoteBatch(symbols);
   const items=PAIR_TICKER_LIST
     .map(sym=>({ sym, q:batch[sym] }))
@@ -1185,10 +1224,10 @@ function renderFundamentals(m){
    Cukup 1 fetch tambahan per scan, tetap kena cache server-side proxy.js
    (TTL per interval) jadi aman kuota walau dipakai auto-scan terus. */
 const HTF_MAP={'1min':'15min','5min':'1h','15min':'1h','1h':'4h','4h':'1day','1day':'1day'};
-async function fetchHTFBias(symbol, baseInterval){
+async function fetchHTFBias(symbol, baseInterval, opts={}){
   const htf=HTF_MAP[baseInterval] || '1h';
   if(htf===baseInterval) return null;
-  const candles=await fetchCandles(symbol, htf);
+  const candles=await fetchCandles(symbol, htf, opts);
   const closes=candles.map(c=>c.close);
   const e9=ema(closes,9), e21=ema(closes,21);
   const n=closes.length-1;
@@ -1288,11 +1327,17 @@ document.getElementById('resetJournalBtn').addEventListener('click', ()=>{
 document.getElementById('maxLossR').addEventListener('input', renderRisk);
 renderRisk();
 
-/* ============ Main scan ============ */
+/* ============ Main scan ============
+   Dulu: kalau scan lagi jalan, klik/ganti-pair berikutnya DIABAIKAN total (silent no-op)
+   sampai scan lama selesai -- user tidak dapat feedback apa-apa. Sekarang: scan lama
+   di-abort (request in-flight dibatalkan lewat AbortController), scan baru langsung jalan. */
 let isScanning=false;
+let scanAbortCtrl=null;
 async function scan(){
-  if(isScanning) return; // cegah scan tumpang tindih (misal ganti pair pas auto-scan lagi jalan) -> hemat kuota API
   if(riskLocked){ document.getElementById('errBox').textContent='Batas rugi harian tercapai — kunci otomatis aktif.'; return; }
+  if(scanAbortCtrl) scanAbortCtrl.abort(); // batalkan scan sebelumnya kalau masih jalan
+  const myCtrl=new AbortController();
+  scanAbortCtrl=myCtrl;
   isScanning=true;
   const symbol=document.getElementById('symbol').value;
   const interval=document.getElementById('interval').value;
@@ -1308,9 +1353,10 @@ async function scan(){
     // sinyal utama selesai) -> keduanya dari siklus fetch yang sama, hasil
     // konfirmasi multi-timeframe lebih sinkron & scan jadi lebih cepat.
     const [candlesRes, htfRes]=await Promise.allSettled([
-      fetchCandles(symbol, interval),
-      fetchHTFBias(symbol, interval)
+      fetchCandles(symbol, interval, { signal:myCtrl.signal }),
+      fetchHTFBias(symbol, interval, { signal:myCtrl.signal })
     ]);
+    if(myCtrl.signal.aborted) return; // sudah digantikan scan yang lebih baru -> jangan render hasil basi
     if(candlesRes.status==='rejected') throw candlesRes.reason;
     const candles=candlesRes.value;
     const sig=buildSignal(candles, symbol);
@@ -1347,10 +1393,11 @@ async function scan(){
         <div class="cell"><div class="k">Support 2</div><div class="v sl">${piv.s2}</div></div>`;
     }catch(pe){ /* pivot gagal, biarkan trend saja tampil */ }
   }catch(e){
-    errBox.textContent=e.message;
+    if(e.name!=='AbortError') errBox.textContent=e.message; // AbortError = sengaja dibatalkan (ganti pair), bukan error nyata
   }finally{
-    btn.disabled=riskLocked; btn.textContent='Scan Sinyal';
+    if(scanAbortCtrl===myCtrl){ btn.disabled=riskLocked; btn.textContent='Scan Sinyal'; }
   }
+  if(myCtrl.signal.aborted) return; // digantikan scan baru -> jangan lanjut fetch COT/fundamental yang sudah basi
 
   // Quote & berita sudah ditangani fastRefresh() (independen, 1-2x/menit).
   // COT & fundamental saham: independen satu sama lain -> jalan paralel.
@@ -1366,10 +1413,26 @@ async function scan(){
       .catch(e=>{ document.getElementById('fundamentalArea').innerHTML=`<div class="empty">${e.message}</div>`; })
       : Promise.resolve()
   ]);
-  isScanning=false;
+  if(scanAbortCtrl===myCtrl) isScanning=false;
 }
 
-window.addEventListener('resize', ()=>{ if(lastCandles && lastSignal) drawChart(lastCandles, lastSignal.symbol, lastSignal); });
+/* Redraw chart dipicu ResizeObserver pada .chart-wrap (bukan cuma window 'resize').
+   Kenapa: saat browser mobile di-toggle ke "Situs Desktop", layout viewport berubah
+   tapi window 'resize' tidak selalu konsisten ter-fire di semua browser -> chart
+   kadang macet di lebar lama / rasio salah. ResizeObserver memantau elemen langsung
+   jadi tetap akurat berapa pun sumber perubahannya (toggle desktop site, rotasi,
+   devtools, split-screen). Debounce ringan (rAF) supaya tidak redraw berkali-kali
+   per resize event.*/
+let resizeRaf=null;
+function scheduleRedraw(){
+  if(resizeRaf) cancelAnimationFrame(resizeRaf);
+  resizeRaf=requestAnimationFrame(()=>{ if(lastCandles && lastSignal) drawChart(lastCandles, lastSignal.symbol, lastSignal); });
+}
+const chartWrapObserver=new ResizeObserver(scheduleRedraw);
+const chartWrapElForObserver=document.querySelector('.chart-wrap');
+if(chartWrapElForObserver) chartWrapObserver.observe(chartWrapElForObserver);
+window.addEventListener('orientationchange', scheduleRedraw);
+window.addEventListener('resize', scheduleRedraw);
 
 document.getElementById('scanBtn').addEventListener('click', scan);
 document.getElementById('symbol').addEventListener('change', scan);
@@ -1566,14 +1629,16 @@ function setVisitorStatus(count, extra){
 
 async function pingPresence(){
   try{
-    const res=await fetch(`/api/proxy?provider=presence&action=ping&id=${visitorId}`);
+    const res=await fetchWithTimeout(`/api/proxy?provider=presence&action=ping&id=${visitorId}`, { timeoutMs:8000 });
     const json=await res.json();
     return json.count ?? 0;
   }catch(e){ return 0; }
 }
 
 async function visitorAutoLoop(){
-  await scan();
+  // tab tersembunyi -> skip scan (hemat kuota), tapi timer tetap jalan supaya
+  // begitu tab aktif lagi, siklus lanjut normal tanpa perlu trigger manual
+  if(!document.hidden) await scan();
   visitorAutoCount++;
   visitorAutoTimer=setTimeout(visitorAutoLoop, currentAutoscanMs());
 }
@@ -1586,9 +1651,14 @@ document.getElementById('interval').addEventListener('change', ()=>{
 // heartbeat presence independen -- lepas total dari siklus scan/ganti pair/timeframe,
 // jadi jumlah pengunjung tetap update walau simbol/timeframe belum berubah
 setInterval(async ()=>{
+  if(document.hidden) return;
   const c=await pingPresence();
   setVisitorStatus(c, c<1 ? 'sinkron terputus, mencoba lagi...' : undefined);
 }, 5*1000);
+// begitu tab aktif lagi setelah lama tersembunyi, langsung ping sekali (jangan tunggu 5d)
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden) pingPresence().then(c=>setVisitorStatus(c));
+});
 
 // jam WIB (UTC+7), bersanding dengan live news -- independen, tick tiap detik
 function updateWIBClock(){
@@ -1635,8 +1705,7 @@ function corrLabel(r){
 }
 async function fetchBTCKlines(interval, limit){
   const bi=BINANCE_INTERVAL[interval] || '15m';
-  const res=await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${bi}&limit=${limit}`);
-  if(!res.ok) throw new Error('Gagal ambil data BTC (Binance).');
+  const res=await fetchWithTimeout(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${bi}&limit=${limit}`, { timeoutMs:8000 });
   const rows=await res.json();
   return rows.map(r=>+r[4]);
 }
@@ -1706,17 +1775,33 @@ function updateDXY(batch, symbol){
   if(dxyVal!=null){ dxyBuffer.push(dxyVal); if(dxyBuffer.length>DXY_BUFFER_MAX) dxyBuffer.shift(); }
   if(symQ && symQ.close){ dxySymBuffer.push(+symQ.close); if(dxySymBuffer.length>DXY_BUFFER_MAX) dxySymBuffer.shift(); }
   const corr=(dxyBuffer.length>=8 && dxySymBuffer.length>=8) ? pearson(toReturns(dxyBuffer), toReturns(dxySymBuffer)) : null;
-  renderDXY(dxyVal, corr, symbol);
+
+  // VIX: gauge risk-on/off, relevan khusus buat saham Nasdaq (>20 mulai waspada, >30 risk-off kuat)
+  const vixQ=batch['VIX'];
+  const vixVal=(vixQ && vixQ.close && vixQ.status!=='error') ? +vixQ.close : null;
+  const vixLabel = vixVal==null ? null : vixVal>=30 ? 'RISK-OFF KUAT' : vixVal>=20 ? 'WASPADA' : 'TENANG';
+  const vixCls = vixVal==null ? '' : vixVal>=20 ? 'short' : 'long';
+
+  // Rasio Gold/Silver: makin tinggi -> silver relatif murah vs gold (biasa dipakai konfirmasi siklus logam)
+  const xau=batch['XAU/USD'], xag=batch['XAG/USD'];
+  const gsRatio=(xau && xau.close && xag && xag.close) ? (+xau.close/+xag.close) : null;
+
+  renderDXY(dxyVal, corr, symbol, { vixVal, vixLabel, vixCls, gsRatio });
 }
-function renderDXY(dxyVal, corr, symbol){
+function renderDXY(dxyVal, corr, symbol, extra={}){
   const el=document.getElementById('dxyArea');
   if(!el) return;
-  if(dxyVal==null){ el.innerHTML='<div class="empty">DXY tidak tersedia dari provider gratis saat ini.</div>'; return; }
   const lbl=corrLabel(corr);
   const srcTxt=dxySource==='live' ? 'live TD' : 'sintetis, proxy mayor FX';
-  el.innerHTML=`
-    <div class="sm-cell"><div class="k">DXY (${srcTxt})</div><div class="sm-num">${dxyVal.toFixed(2)}</div></div>
-    <div class="sm-cell"><div class="k">Korelasi vs ${symbol}</div><div class="sm-num ${lbl.cls}">${corr!=null?corr.toFixed(2):'-'}</div><div class="sm-delta">${lbl.text}</div></div>`;
+  const dxyCell = dxyVal==null
+    ? '<div class="sm-cell"><div class="k">DXY</div><div class="empty" style="padding:0;">Tidak tersedia dari provider gratis.</div></div>'
+    : `<div class="sm-cell"><div class="k">DXY (${srcTxt})</div><div class="sm-num">${dxyVal.toFixed(2)}</div></div>
+       <div class="sm-cell"><div class="k">Korelasi vs ${symbol}</div><div class="sm-num ${lbl.cls}">${corr!=null?corr.toFixed(2):'-'}</div><div class="sm-delta">${lbl.text}</div></div>`;
+  const vixCell = extra.vixVal==null ? ''
+    : `<div class="sm-cell"><div class="k">VIX (sentimen Nasdaq)</div><div class="sm-num ${extra.vixCls}">${extra.vixVal.toFixed(2)}</div><div class="sm-delta">${extra.vixLabel}</div></div>`;
+  const gsCell = extra.gsRatio==null ? ''
+    : `<div class="sm-cell"><div class="k">Rasio Gold/Silver</div><div class="sm-num">${extra.gsRatio.toFixed(1)}</div><div class="sm-delta">XAU/USD ÷ XAG/USD</div></div>`;
+  el.innerHTML = dxyCell + vixCell + gsCell;
 }
 
 /* ============ Siklus refresh cepat (quote, DXY, ticker, berita) ============
@@ -1727,6 +1812,7 @@ function renderDXY(dxyVal, corr, symbol){
    batch untuk semua quote (lihat fetchPairTicker). */
 const FAST_REFRESH_MS=45*1000;
 async function fastRefresh(){
+  if(document.hidden) return; // tab tersembunyi -> skip, hemat kuota (batch quote + news)
   const symbol=document.getElementById('symbol').value;
   const [quoteRes, newsRes]=await Promise.allSettled([ fetchPairTicker(symbol), fetchNews() ]);
   if(quoteRes.status==='fulfilled'){
@@ -1740,6 +1826,7 @@ async function fastRefresh(){
 }
 fastRefresh();
 setInterval(fastRefresh, FAST_REFRESH_MS);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) fastRefresh(); });
 </script>
 </body>
 </html>
