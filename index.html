@@ -570,12 +570,22 @@ async function tdRequest(endpoint, params, opts={}){
    Dipakai supaya banyak simbol (pair ticker, DXY, HTF) tidak masing-masing
    bikin request sendiri -- 1 request, banyak data, hemat kuota. */
 function splitBatchResult(json, symbols){
-  if(symbols.length===1) return { [symbols[0]]: json };
+  if(symbols.length===1){
+    const { _cacheMeta, ...quote } = (json && typeof json==='object') ? json : {};
+    return { [symbols[0]]: quote, _cacheMeta };
+  }
   return (json && typeof json==='object') ? json : {};
 }
 async function fetchQuoteBatch(symbols, opts={}){
   const json=await tdRequest('quote', { symbol: symbols.join(',') }, opts);
-  return splitBatchResult(json, symbols);
+  const batch=splitBatchResult(json, symbols);
+  // Mode manual API key (langsung ke TD, bukan lewat /api/proxy) tidak pernah
+  // punya _cacheMeta karena tidak melalui cache server -> badge selalu tampil '-'.
+  // Ini bukan berarti tidak fresh, justru selalu LIVE (fetch langsung tiap kali).
+  if(!batch._cacheMeta && document.getElementById('apikey').value.trim()){
+    batch._cacheMeta={ cached:false, ageMs:0 };
+  }
+  return batch;
 }
 async function fhRequest(endpoint, params, opts={}){
   const manualKey=document.getElementById('newskey').value.trim();
@@ -688,8 +698,15 @@ function trendLabel(adx){
 
 /* ============ Pivot points (dari candle harian sebelumnya) ============ */
 const pivotCache = new Map(); // key: symbol_YYYY-MM-DD -> hemat request TD karena datanya harian
+function cleanupPivotCache(todayStr){
+  // Map ini tidak pernah di-clear -> membesar terus tiap ganti simbol/hari
+  // selama sesi browser terbuka lama. Hapus entry yang bukan tanggal hari ini.
+  for(const key of pivotCache.keys()){ if(!key.endsWith('_'+todayStr)) pivotCache.delete(key); }
+}
 async function fetchPrevDay(symbol){
-  const cacheKey = symbol + '_' + new Date().toISOString().slice(0,10);
+  const todayStr = new Date().toISOString().slice(0,10);
+  cleanupPivotCache(todayStr);
+  const cacheKey = symbol + '_' + todayStr;
   if(pivotCache.has(cacheKey)) return pivotCache.get(cacheKey);
   const json=await tdRequest('time_series', { symbol, interval:'1day', outputsize:2 });
   if(json.status==='error' || !json.values) throw new Error('Gagal ambil data harian untuk pivot.');
@@ -899,14 +916,25 @@ function drawChart(candles, symbol, sig){
   ctx.fillText(symbol||'', pad.l+10, cssH-pad.b-14);
   ctx.restore();
 
-  // Bollinger band shading (digambar di belakang candle)
-  if(bbUpperV[0]!=null){
-    ctx.beginPath();
-    bbUpperV.forEach((v,i)=>{ if(v==null) return; const px=x(i), py=y(v); i===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
-    for(let i=bbLowerV.length-1;i>=0;i--){ if(bbLowerV[i]==null) continue; ctx.lineTo(x(i), y(bbLowerV[i])); }
-    ctx.closePath();
-    ctx.fillStyle='rgba(255,255,255,.05)';
-    ctx.fill();
+  // Bollinger band shading (digambar di belakang candle).
+  // Titik warm-up (period 20 belum tercapai) bisa null di awal window kalau
+  // outputsize candle sedikit -> gambar per-segmen valid, bukan all-or-nothing.
+  ctx.fillStyle='rgba(255,255,255,.05)';
+  let segStart=-1;
+  for(let i=0;i<=bbUpperV.length;i++){
+    const valid=i<bbUpperV.length && bbUpperV[i]!=null && bbLowerV[i]!=null;
+    if(valid && segStart===-1) segStart=i;
+    if((!valid || i===bbUpperV.length) && segStart!==-1){
+      const segEnd=i-1;
+      if(segEnd>segStart){
+        ctx.beginPath();
+        for(let j=segStart;j<=segEnd;j++){ const px=x(j), py=y(bbUpperV[j]); j===segStart?ctx.moveTo(px,py):ctx.lineTo(px,py); }
+        for(let j=segEnd;j>=segStart;j--) ctx.lineTo(x(j), y(bbLowerV[j]));
+        ctx.closePath();
+        ctx.fill();
+      }
+      segStart=-1;
+    }
   }
 
   // candles (candle terakhir dikasih glow tipis biar kelihatan "hidup" tanpa animasi loop)
@@ -988,7 +1016,15 @@ function estimateLot(balance, riskPct, entry, sl, symbol){
   const slDistance=Math.abs(entry-sl);
   if(slDistance===0) return null;
   const contract=contractSizeFor(symbol);
-  const lots=riskAmount/(slDistance*contract);
+  // riskAmount/(slDistance*contract) valid HANYA kalau quote currency = USD
+  // (EUR/USD, GBP/USD, AUD/USD, NZD/USD, XAU/USD, XAG/USD -> price sudah dalam USD).
+  // Untuk USD/JPY, USD/CHF, USD/CAD, quote currency-nya JPY/CHF/CAD, bukan USD:
+  // slDistance*contract menghasilkan nilai dalam quote currency, harus dibagi
+  // harga (entry) dulu untuk dikonversi ke USD -> setara mengalikan lots dengan entry.
+  const isUsdBaseNonUsdQuote = /^USD\/(?!USD)/.test(symbol) && symbol!=='USD/USD';
+  const lots = isUsdBaseNonUsdQuote
+    ? (riskAmount*entry)/(slDistance*contract)
+    : riskAmount/(slDistance*contract);
   return lots>0 ? lots.toFixed(2) : null;
 }
 
