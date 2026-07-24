@@ -1112,6 +1112,9 @@ function tagCategory(headline){
 function normalizeHeadline(h){
   return h.toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,80);
 }
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 async function fetchFinnhubNews(){
   const json=await fhRequest('news', { category:'forex' });
   if(!Array.isArray(json)) throw new Error('Finnhub: gagal memuat news.');
@@ -1161,13 +1164,16 @@ function renderNews(items){
   if(!items.length){ area.innerHTML='<div class="empty">Tidak ada berita ditemukan.</div>'; return; }
   // tampilkan full list (sampai 35) supaya panel selalu terisi penuh,
   // bukan cuma yang tag-nya "prioritas" (fed/data/komoditas/geo) seperti sebelumnya.
-  area.innerHTML=`<div class="meta" style="margin-bottom:8px;">${items.length} berita · diperbarui ${new Date().toLocaleTimeString('id-ID')} · sumber: ${[...new Set(items.map(n=>n.source))].slice(0,4).join(', ')}</div>` +
-    items.slice(0,35).map(n=>`
+  area.innerHTML=`<div class="meta" style="margin-bottom:8px;">${items.length} berita · diperbarui ${new Date().toLocaleTimeString('id-ID')} · sumber: ${[...new Set(items.map(n=>n.source))].map(escapeHtml).slice(0,4).join(', ')}</div>` +
+    items.slice(0,35).map(n=>{
+      const safeUrl=/^https?:\/\//i.test(n.url||'')?n.url:'#';
+      return `
     <div class="news-item">
-      <span class="news-tag ${n.cls}">${n.label}</span>
-      <a href="${n.url}" target="_blank" rel="noopener">${n.headline}</a>
-      <div class="news-time">${n.source} · ${n.timeLabel}</div>
-    </div>`).join('');
+      <span class="news-tag ${n.cls}">${escapeHtml(n.label)}</span>
+      <a href="${safeUrl}" target="_blank" rel="noopener">${escapeHtml(n.headline)}</a>
+      <div class="news-time">${escapeHtml(n.source)} · ${n.timeLabel}</div>
+    </div>`;
+    }).join('');
 }
 function renderTicker(items){
   const move=document.getElementById('tickerMove');
@@ -1176,7 +1182,7 @@ function renderTicker(items){
   // (dulu fixed 110s: kalau item dikit jadi kepencet2, kalau banyak kelamaan)
   const duration=Math.max(50, Math.min(220, items.length*7));
   document.documentElement.style.setProperty('--ticker-duration', duration+'s');
-  move.innerHTML=items.slice(0,20).map(n=>`<span class="${n.tag!=='gen'?'fed-hl':''}">${n.tag!=='gen'?'⚡ '+n.label+': ':'▸ '}${n.headline}</span>`).join('');
+  move.innerHTML=items.slice(0,20).map(n=>`<span class="${n.tag!=='gen'?'fed-hl':''}">${n.tag!=='gen'?'⚡ '+escapeHtml(n.label)+': ':'▸ '}${escapeHtml(n.headline)}</span>`).join('');
 }
 
 /* ============ Quote real-time (harga sekarang, spesifik) ============
