@@ -1443,18 +1443,28 @@ async function scan(){
 
   // Quote & berita sudah ditangani fastRefresh() (independen, 1-2x/menit).
   // COT & fundamental saham: independen satu sama lain -> jalan paralel.
-  const fundPanel=document.getElementById('fundamentalPanel');
-  const isStock=!symbol.includes('/');
-  fundPanel.style.display=isStock?'block':'none';
-  await Promise.allSettled([
-    fetchCOTCached(symbol)
-      .then(rows=>renderCOT(rows, symbol))
-      .catch(e=>{ document.getElementById('cotArea').innerHTML=`<div class="empty">${e.message}</div>`; }),
-    isStock ? fetchStockFundamentals(symbol)
-      .then(renderFundamentals)
-      .catch(e=>{ document.getElementById('fundamentalArea').innerHTML=`<div class="empty">${e.message}</div>`; })
-      : Promise.resolve()
-  ]);
+  // BUG FIX: bagian ini dulu ada DI LUAR try/catch scan() -> kalau throw sync
+  // (mis. elemen DOM null / error tak terduga), scan() reject tanpa ketangkep
+  // sampai ke visitorAutoLoop() -> setTimeout loop berikutnya TIDAK PERNAH
+  // terjadwal lagi (auto-scan mati permanen di background, tanpa error ke user,
+  // cuma "Uncaught (in promise)" di console). Sekarang dibungkus try/catch + log.
+  try{
+    const fundPanel=document.getElementById('fundamentalPanel');
+    const isStock=!symbol.includes('/');
+    if(fundPanel) fundPanel.style.display=isStock?'block':'none';
+    await Promise.allSettled([
+      fetchCOTCached(symbol)
+        .then(rows=>renderCOT(rows, symbol))
+        .catch(e=>{ document.getElementById('cotArea').innerHTML=`<div class="empty">${e.message}</div>`; }),
+      isStock ? fetchStockFundamentals(symbol)
+        .then(renderFundamentals)
+        .catch(e=>{ document.getElementById('fundamentalArea').innerHTML=`<div class="empty">${e.message}</div>`; })
+        : Promise.resolve()
+    ]);
+  }catch(tailErr){
+    console.error('[scan:tail] gagal render panel COT/fundamental, loop TETAP lanjut:', tailErr);
+    errBox.textContent='Sebagian data (COT/fundamental) gagal dimuat — sinyal utama tetap valid.';
+  }
   if(scanAbortCtrl===myCtrl) isScanning=false;
 }
 
@@ -1680,7 +1690,14 @@ async function pingPresence(){
 async function visitorAutoLoop(){
   // tab tersembunyi -> skip scan (hemat kuota), tapi timer tetap jalan supaya
   // begitu tab aktif lagi, siklus lanjut normal tanpa perlu trigger manual
-  if(!document.hidden) await scan();
+  // BUG FIX (root cause auto-scan "mati" di background): scan() yang reject
+  // tanpa try/catch di sini bikin baris setTimeout di bawah TIDAK PERNAH jalan
+  // -> loop auto-scan berhenti total dan permanen sampai user reload manual.
+  try{
+    if(!document.hidden) await scan();
+  }catch(loopErr){
+    console.error('[visitorAutoLoop] scan() gagal, loop tetap dijadwalkan ke siklus berikutnya:', loopErr);
+  }
   visitorAutoCount++;
   visitorAutoTimer=setTimeout(visitorAutoLoop, currentAutoscanMs());
 }
@@ -1714,7 +1731,10 @@ setInterval(updateWIBClock, 1000);
 updateWIBClock();
 
 // refresh langsung begitu halaman dibuka / link diklik, lalu mulai loop auto-scan
-pingPresence().then(c=>{ setVisitorStatus(c); scan(); visitorAutoLoop(); });
+// BUG FIX: scan() dipanggil manual di sini DAN visitorAutoLoop() juga scan() duluan
+// di baris pertamanya -> dua scan nyaris bersamaan di initial load (yang pertama
+// langsung ke-abort sia-sia oleh AbortController). Cukup panggil visitorAutoLoop().
+pingPresence().then(c=>{ setVisitorStatus(c); visitorAutoLoop(); });
 
 /* ============ Korelasi & Sentimen Risiko (BTC/USDT via Binance — gratis, no key) ============
    BTC dipakai proxy sentimen risk-on/off ritel. Live price lewat WebSocket publik Binance
