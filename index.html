@@ -6,7 +6,7 @@
 <title>SIGNAL ENGINE FX & METAL</title>
 <link rel="icon" type="image/jpeg" href="/assets/dt-icon.jpg">
 <link rel="apple-touch-icon" href="/assets/dt-icon.jpg">
-<meta property="og:title" content="DASHBORD TRADING ENGINE">
+<meta property="og:title" content="DT ENGINE">
 <meta property="og:description" content="Signal generator forex, metal & saham Nasdaq — EMA/RSI/ATR, chart realtime, korelasi BTC, COT smart money, gratis & terbuka untuk trader pemula-menengah.">
 <meta property="og:image" content="/assets/dt-icon.jpg">
 <meta property="og:type" content="website">
@@ -230,25 +230,6 @@ footer a{color:var(--primary);}
   .ticker-label{padding:0 8px; font-size:9.5px;}
 }
 
-/* mini ticker: dashboard harga pair lain real-time di panel Konfigurasi (reuse quote endpoint) */
-.mini-ticker-bar{
-  display:flex; align-items:center; height:30px; margin-top:12px;
-  background:var(--panel2); border:1px solid var(--border); border-radius:4px; overflow:hidden;
-}
-.mini-ticker-label{
-  flex:0 0 auto; background:var(--primary); color:#000000; font-family:'Orbitron',sans-serif;
-  font-weight:800; font-size:9.5px; letter-spacing:1px; padding:0 10px; height:100%;
-  display:flex; align-items:center; gap:5px;
-}
-.mini-ticker-label .live-dot{background:#000000;}
-.mini-ticker-track{flex:1; overflow:hidden; white-space:nowrap; position:relative; height:100%; display:flex; align-items:center;}
-.mini-ticker-move{display:inline-block; white-space:nowrap; animation:ticker var(--mini-ticker-duration,45s) linear infinite; padding-left:100%;}
-.mini-ticker-move span{margin-right:24px; font-size:11px;}
-.mini-ticker-move span b{color:var(--text); margin-right:5px;}
-.mini-ticker-move span.up{color:var(--primary);}
-.mini-ticker-move span.down{color:var(--red);}
-.mini-ticker-track:hover .mini-ticker-move{animation-play-state:paused;}
-
 /* smart money / COT panel */
 .sm-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;}
 .sm-cell{flex:1; min-width:150px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:10px 12px;}
@@ -370,10 +351,6 @@ footer a{color:var(--primary);}
         <label for="newskey">Finnhub Key (fallback)</label>
         <input id="newskey" type="password" placeholder="Kosongkan jika sudah di-set via secret">
       </div>
-    </div>
-    <div class="mini-ticker-bar">
-      <div class="mini-ticker-label"><span class="live-dot"></span>PAIR</div>
-      <div class="mini-ticker-track"><div class="mini-ticker-move" id="pairTickerMove"><span>Memuat harga pair lain...</span></div></div>
     </div>
     <div class="row">
       <button id="scanBtn">Scan Sinyal</button>
@@ -1178,7 +1155,14 @@ async function fetchMarketauxNews(){
   // Sumber tambahan opsional. Kalau MARKETAUX_KEY belum di-set di server,
   // proxy akan balikin error -> ditangkap & diabaikan (graceful degrade),
   // jadi tidak wajib untuk situs tetap jalan.
-  const json=await tdRequestGeneric('mx', 'news/all', { search:'forex OR dollar OR "interest rate" OR gold OR fed', language:'en', limit:30 });
+  // published_after + sort wajib di-set -> tanpa ini Marketaux balikin hasil dari
+  // seluruh arsip historisnya (bisa 2022/2024) yang cuma cocok keyword, bukan berita baru.
+  const bucketMs=15*60*1000; // dibucket biar cache key stabil, bukan berubah tiap request
+  const publishedAfter=new Date(Math.floor((Date.now()-3*24*60*60*1000)/bucketMs)*bucketMs).toISOString().slice(0,19);
+  const json=await tdRequestGeneric('mx', 'news/all', {
+    search:'forex OR dollar OR "interest rate" OR gold OR fed', language:'en', limit:30,
+    published_after:publishedAfter, sort:'published_desc'
+  });
   if(!json || !Array.isArray(json.data)) throw new Error('Marketaux: tidak tersedia.');
   return json.data.map(n=>({
     headline:n.title, url:n.url, source:n.source||'Marketaux',
@@ -1194,9 +1178,12 @@ async function fetchNews(){
   const results=await Promise.allSettled([fetchFinnhubNews(), fetchMarketauxNews()]);
   const combined=[];
   const seen=new Set();
+  const MAX_AGE_MS=5*24*60*60*1000; // buang berita >5 hari -> anti data basi (2022/2024) dari sumber manapun
+  const cutoff=Date.now()-MAX_AGE_MS;
   for(const r of results){
     if(r.status!=='fulfilled') continue;
     for(const n of r.value){
+      if(!isFinite(n.ts) || n.ts<cutoff) continue; // tanggal invalid atau kelewat lama -> skip
       const key=normalizeHeadline(n.headline);
       if(seen.has(key)) continue;
       seen.add(key);
@@ -1279,21 +1266,7 @@ async function fetchPairTicker(activeSymbol){
   // risk-on/off Nasdaq di panel Korelasi & Sentimen, gratis dari sisi kuota.
   const symbols=[...new Set([...PAIR_TICKER_LIST, 'DXY', 'VIX', activeSymbol].filter(Boolean))];
   const batch=await fetchQuoteBatch(symbols);
-  const items=PAIR_TICKER_LIST
-    .map(sym=>({ sym, q:batch[sym] }))
-    .filter(({q})=>q && q.close && q.status!=='error');
-  renderPairTicker(items);
   return batch;
-}
-function renderPairTicker(items){
-  const move=document.getElementById('pairTickerMove');
-  if(!move || !items.length) return;
-  const duration=Math.max(25, Math.min(70, items.length*6));
-  document.documentElement.style.setProperty('--mini-ticker-duration', duration+'s');
-  move.innerHTML=items.map(({sym,q})=>{
-    const dec=decimalsFor(sym), pct=+q.percent_change, up=pct>=0;
-    return `<span class="${up?'up':'down'}"><b>${sym}</b>${(+q.close).toFixed(dec)} (${up?'+':''}${pct.toFixed(2)}%)</span>`;
-  }).join('');
 }
 
 /* ============ Fundamental saham (mikro, khusus simbol saham/index) ============ */
