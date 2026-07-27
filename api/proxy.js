@@ -28,12 +28,14 @@ const cacheStore = globalThis.__dtCache || (globalThis.__dtCache = new Map());
 // yang sama persis di detik yang hampir bersamaan.
 const inFlight = globalThis.__dtInFlight || (globalThis.__dtInFlight = new Map());
 
-async function fetchUpstream(url, timeoutMs=10000){
+async function fetchUpstream(url, timeoutMs=10000, headers={}){
   const ac=new AbortController();
   const timer=setTimeout(()=>ac.abort(), timeoutMs);
-  try{ return await fetch(url, { signal:ac.signal }); }
+  try{ return await fetch(url, { signal:ac.signal, headers }); }
   finally{ clearTimeout(timer); }
 }
+// Yahoo Finance menolak request tanpa User-Agent browser (balikin 999/429) -> di-set manual.
+const YAHOO_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' };
  
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -72,6 +74,9 @@ function ttlFor(provider, endpoint, params) {
   if (provider === 'fh') {
     if (endpoint === 'news') return 5 * 60 * 1000;
     if (endpoint === 'stock/metric') return 6 * 60 * 60 * 1000;
+    if (endpoint === 'forex/candle' || endpoint === 'stock/candle') {
+      return FH_CANDLE_TTL[params.resolution] || 5 * 60 * 1000;
+    }
     return 2 * 60 * 1000;
   }
   if (provider === 'mx') {
@@ -80,8 +85,19 @@ function ttlFor(provider, endpoint, params) {
   if (provider === 'cot') {
     return 12 * 60 * 60 * 1000; // CFTC COT cuma update mingguan (Jumat) -> cache lama aman
   }
+  if (provider === 'yahoo') {
+    return 60 * 1000; // DXY dari Yahoo, cukup 1x/menit
+  }
   return 60 * 1000;
 }
+// TTL candle Finnhub per resolution (string resolusi Finnhub: 1/5/15/60/D)
+const FH_CANDLE_TTL = {
+  '1': 90 * 1000,
+  '5': 5 * 60 * 1000,
+  '15': 10 * 60 * 1000,
+  '60': 30 * 60 * 1000,
+  'D': 6 * 60 * 60 * 1000,
+};
  
 function cacheKey(provider, endpoint, params) {
   const sortedKeys = Object.keys(params).sort();
@@ -111,13 +127,13 @@ export default async function handler(req, res) {
     return res.status(200).json({ td: quota.td, fh: quota.fh, mx: quota.mx, day: quota.day, limit: QUOTA_LIMIT_TD });
   }
  
-  if (!provider || (!endpoint && provider !== 'cot')) {
+  if (!provider || (!endpoint && provider !== 'cot' && provider !== 'yahoo')) {
     return res.status(400).json({ error: 'Parameter provider & endpoint wajib diisi.' });
   }
-  if (provider !== 'td' && provider !== 'fh' && provider !== 'mx' && provider !== 'cot') {
-    return res.status(400).json({ error: 'Provider tidak dikenal (pakai "td", "fh", "mx", atau "cot").' });
+  if (provider !== 'td' && provider !== 'fh' && provider !== 'mx' && provider !== 'cot' && provider !== 'yahoo') {
+    return res.status(400).json({ error: 'Provider tidak dikenal (pakai "td", "fh", "mx", "cot", atau "yahoo").' });
   }
-  const endpointKey = endpoint || 'cot';
+  const endpointKey = endpoint || (provider === 'yahoo' ? 'chart' : 'cot');
  
   const key = cacheKey(provider, endpointKey, rest);
   const now = Date.now();
@@ -144,6 +160,13 @@ export default async function handler(req, res) {
     const limit = rest.limit || '2';
     const where = encodeURIComponent(`market_and_exchange_names='${market}'`);
     url = `https://publicreporting.cftc.gov/resource/6dca-aqww.json?$where=${where}&$order=report_date_as_yyyy_mm_dd DESC&$limit=${limit}`;
+  } else if (provider === 'yahoo') {
+    // Yahoo Finance chart API, data publik tanpa API key. Dipakai khusus untuk DXY
+    // (US Dollar Index) karena Twelve Data/Finnhub free tier tidak selalu punya simbol ini.
+    const symbol = rest.symbol || 'DX-Y.NYB';
+    const interval = rest.interval || '5m';
+    const range = rest.range || '1d';
+    url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}`;
   } else {
     // Marketaux: opsional. Kalau MARKETAUX_KEY belum di-set di Vercel env,
     // sengaja dibalikin error supaya client (fetchMarketauxNews) gagal dengan
@@ -169,9 +192,10 @@ export default async function handler(req, res) {
   }
 
   const doFetch = (async () => {
-    const upstream = await fetchUpstream(url);
+    const upstream = await fetchUpstream(url, 10000, provider === 'yahoo' ? YAHOO_HEADERS : {});
     const data = await upstream.json();
-    if (!(data && data.status === 'error')) {
+    const isError = (data && data.status === 'error') || (data && data.chart && data.chart.error);
+    if (!isError) {
       cacheStore.set(key, { ts: Date.now(), data });
       bumpQuota(provider);
       return data;
