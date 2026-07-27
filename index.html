@@ -6,7 +6,7 @@
 <title>SIGNAL ENGINE FX & METAL</title>
 <link rel="icon" type="image/jpeg" href="/assets/dt-icon.jpg">
 <link rel="apple-touch-icon" href="/assets/dt-icon.jpg">
-<meta property="og:title" content="DT ENGINE">
+<meta property="og:title" content="DASHBORD TRADING ENGINE">
 <meta property="og:description" content="Signal generator forex, metal & saham Nasdaq — EMA/RSI/ATR, chart realtime, korelasi BTC, COT smart money, gratis & terbuka untuk trader pemula-menengah.">
 <meta property="og:image" content="/assets/dt-icon.jpg">
 <meta property="og:type" content="website">
@@ -792,13 +792,65 @@ function contractSizeFor(sym){
   return 100000;                    // 1 lot standar FX
 }
 
-/* ============ Fetch candles ============ */
-async function fetchCandles(symbol, interval, opts={}){
-  const json=await tdRequest('time_series', { symbol, interval, outputsize:100 }, opts);
-  if(json.status==='error' || !json.values) throw new Error(json.message || 'Gagal mengambil data. Cek API key / limit request.');
-  return json.values.slice().reverse().map(v=>({
-    time:v.datetime, open:+v.open, high:+v.high, low:+v.low, close:+v.close
+/* ============ Fetch candles ============
+   Sumber utama: Finnhub forex/candle (symbol format OANDA:XXX_YYY, sudah tersedia
+   lewat FINNHUB_KEY di proxy). Kalau gagal (mis. plan gratis Finnhub membatasi
+   endpoint candle -> 403, atau simbol saham/index yang belum dipetakan), fallback
+   ke Twelve Data time_series seperti sebelumnya supaya chart tetap jalan. */
+const FH_FOREX_SYMBOL={
+  'EUR/USD':'OANDA:EUR_USD','GBP/USD':'OANDA:GBP_USD','USD/JPY':'OANDA:USD_JPY',
+  'USD/CHF':'OANDA:USD_CHF','AUD/USD':'OANDA:AUD_USD','USD/CAD':'OANDA:USD_CAD',
+  'NZD/USD':'OANDA:NZD_USD','XAU/USD':'OANDA:XAU_USD','XAG/USD':'OANDA:XAG_USD',
+};
+const FH_RESOLUTION={'1min':'1','5min':'5','15min':'15','1h':'60','4h':'60','1day':'D'};
+const FH_RES_SECONDS={'1':60,'5':300,'15':900,'60':3600,'D':86400};
+/* Finnhub tidak punya resolution 4h asli -> ambil candle H1 lalu digabung per 4 jam
+   (bucket UTC 00/04/08/12/16/20) supaya OHLC-nya tetap benar (bukan sekadar sampling). */
+function resampleH1toH4(candles){
+  const groups=new Map();
+  for(const c of candles){
+    const t=typeof c.time==='number' ? c.time*1000 : Date.parse(c.time);
+    const d=new Date(t);
+    const bucketHour=Math.floor(d.getUTCHours()/4)*4;
+    const key=Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), bucketHour);
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([key, arr])=>({
+    time:new Date(key).toISOString(),
+    open:arr[0].open, close:arr[arr.length-1].close,
+    high:Math.max(...arr.map(c=>c.high)), low:Math.min(...arr.map(c=>c.low)),
   }));
+}
+async function fetchCandlesFinnhub(symbol, interval, opts={}){
+  const fhSym=FH_FOREX_SYMBOL[symbol];
+  if(!fhSym) throw new Error('Simbol ini belum dipetakan ke Finnhub.');
+  const resolution=FH_RESOLUTION[interval] || '15';
+  const secPerBar=FH_RES_SECONDS[resolution];
+  const barsNeeded = interval==='4h' ? 100*4 : 100; // 4h butuh 4x bar H1 mentah sblm di-resample
+  // 'to' dibucket ke kelipatan TTL candle biar request yg masih dalam window TTL sama
+  // persis parameternya -> kena cache server-side proxy.js (bukan selalu upstream baru).
+  const bucketSec=Math.max(60, secPerBar);
+  const to=Math.floor(Date.now()/1000/bucketSec)*bucketSec;
+  const from=to - barsNeeded*secPerBar;
+  const json=await fhRequest('forex/candle', { symbol:fhSym, resolution, from, to }, opts);
+  if(json.s!=='ok' || !Array.isArray(json.c) || !json.c.length){
+    throw new Error(json.error || 'Data candle Finnhub kosong (kemungkinan endpoint ini butuh plan berbayar).');
+  }
+  const raw=json.t.map((t,i)=>({ time:t, open:json.o[i], high:json.h[i], low:json.l[i], close:json.c[i] }));
+  return (interval==='4h' ? resampleH1toH4(raw) : raw).slice(-100);
+}
+async function fetchCandles(symbol, interval, opts={}){
+  try{
+    return await fetchCandlesFinnhub(symbol, interval, opts);
+  }catch(fhErr){
+    if(fhErr.name==='AbortError') throw fhErr; // dibatalkan sengaja (ganti pair) -> jangan fallback
+    const json=await tdRequest('time_series', { symbol, interval, outputsize:100 }, opts);
+    if(json.status==='error' || !json.values) throw new Error(json.message || fhErr.message || 'Gagal mengambil data. Cek API key / limit request.');
+    return json.values.slice().reverse().map(v=>({
+      time:v.datetime, open:+v.open, high:+v.high, low:+v.low, close:+v.close
+    }));
+  }
 }
 
 /* ============ Signal generation ============ */
@@ -1819,6 +1871,7 @@ setInterval(()=>{ if(btcLastPrice!=null) renderCorrelation(lastCorr, document.ge
 const dxyBuffer=[], dxySymBuffer=[];
 const DXY_BUFFER_MAX=60;
 let dxySource='none'; // 'live' | 'synthetic' | 'none'
+let dxySourceLabel='';
 
 function computeSyntheticDXY(batch){
   const eur=+batch['EUR/USD']?.close, jpy=+batch['USD/JPY']?.close, gbp=+batch['GBP/USD']?.close,
@@ -1826,11 +1879,25 @@ function computeSyntheticDXY(batch){
   if(![eur,jpy,gbp,cad,chf].every(v=>isFinite(v) && v>0)) return null;
   return 50.14348112*Math.pow(eur,-0.576)*Math.pow(jpy,0.136)*Math.pow(gbp,-0.119)*Math.pow(cad,0.091)*Math.pow(chf,0.036);
 }
-function updateDXY(batch, symbol){
-  const live=batch['DXY'];
+/* DXY resmi dari Yahoo Finance (simbol DX-Y.NYB), gratis tanpa API key, lewat proxy
+   supaya tidak kena CORS. Prioritas utama karena lebih akurat dari rumus sintetis. */
+async function fetchDXYYahoo(){
+  const qs=new URLSearchParams({provider:'yahoo', symbol:'DX-Y.NYB', interval:'5m', range:'1d'});
+  const json=await requestJSON(`/api/proxy?${qs.toString()}`);
+  const closes=json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+  if(!Array.isArray(closes)) throw new Error('Data DXY Yahoo kosong.');
+  for(let i=closes.length-1;i>=0;i--){ if(closes[i]!=null) return +closes[i]; }
+  throw new Error('Data DXY Yahoo tidak ada nilai valid.');
+}
+async function updateDXY(batch, symbol){
   let dxyVal;
-  if(live && live.close && live.status!=='error'){ dxyVal=+live.close; dxySource='live'; }
-  else{ dxyVal=computeSyntheticDXY(batch); dxySource=dxyVal!=null?'synthetic':'none'; }
+  try{
+    dxyVal=await fetchDXYYahoo(); dxySource='live'; dxySourceLabel='live Yahoo Finance';
+  }catch(e){
+    const live=batch['DXY'];
+    if(live && live.close && live.status!=='error'){ dxyVal=+live.close; dxySource='live'; dxySourceLabel='live TD'; }
+    else{ dxyVal=computeSyntheticDXY(batch); dxySource=dxyVal!=null?'synthetic':'none'; dxySourceLabel='sintetis, proxy mayor FX'; }
+  }
 
   const symQ=batch[symbol];
   if(dxyVal!=null){ dxyBuffer.push(dxyVal); if(dxyBuffer.length>DXY_BUFFER_MAX) dxyBuffer.shift(); }
@@ -1853,7 +1920,7 @@ function renderDXY(dxyVal, corr, symbol, extra={}){
   const el=document.getElementById('dxyArea');
   if(!el) return;
   const lbl=corrLabel(corr);
-  const srcTxt=dxySource==='live' ? 'live TD' : 'sintetis, proxy mayor FX';
+  const srcTxt=dxySourceLabel || 'sintetis, proxy mayor FX';
   const dxyCell = dxyVal==null
     ? '<div class="sm-cell"><div class="k">DXY</div><div class="empty" style="padding:0;">Tidak tersedia dari provider gratis.</div></div>'
     : `<div class="sm-cell"><div class="k">DXY (${srcTxt})</div><div class="sm-num">${dxyVal.toFixed(2)}</div></div>
@@ -1880,7 +1947,7 @@ async function fastRefresh(){
     const batch=quoteRes.value;
     const q=batch[symbol];
     if(q && q.close) renderQuote(q, symbol, batch._cacheMeta); else document.getElementById('quoteArea').innerHTML='<div class="empty">Quote tidak tersedia.</div>';
-    updateDXY(batch, symbol);
+    await updateDXY(batch, symbol);
   }
   if(newsRes.status==='fulfilled'){ renderNews(newsRes.value); renderTicker(newsRes.value); }
   else document.getElementById('newsArea').innerHTML='<div class="empty">Gagal memuat berita dari semua sumber.</div>';
