@@ -8,7 +8,9 @@
 > - 💱 Forex Major Pairs
 > - 🪙 Metal Pairs (Gold, Silver, dll.)
 > - 📈 Nasdaq & Indeks terkait
-> - **VISIT ON [DASHDING)[https://dashding.vercel.app]**
+
+ **VISIT ON** [DASHDING]
+(https://dashding.vercel.app)
 
 ---
 
